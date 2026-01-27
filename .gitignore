@@ -1,0 +1,131 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+
+# Rails
+*.rbc
+capybara-*.html
+.rspec
+/db/*.sqlite3
+/db/*.sqlite3-*
+/public/system
+/coverage/
+/spec/tmp
+*.orig
+rerun.txt
+pickle-email-*.html
+
+# Rails logs and temp files
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+
+# Rails cache
+/tmp/cache
+/tmp/pids
+/tmp/sockets
+
+# Storage
+/storage/*
+!/storage/.keep
+/tmp/storage/*
+!/tmp/storage/.keep
+
+# Public uploads
+/public/uploads
+
+# Master key for decrypting credentials
+/config/master.key
+/config/credentials/*.key
+
+# Bundler
+/.bundle
+/vendor/bundle
+
+# Node modules (if using asset pipeline)
+/node_modules
+/yarn-error.log
+yarn-debug.log*
+.yarn-integrity
+
+# Assets
+/public/assets
+/public/packs
+/public/packs-test
+
+# Docker volumes and data
+postgres-data/
+redis-data/
+caddy-data/
+caddy-config/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.nfs*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+nbproject/
+
+# Test coverage
+coverage/
+.coverage
+.pytest_cache/
+htmlcov/
+
+# RSpec
+/spec/examples.txt
+
+# SimpleCov
+/coverage/
+
+# VCR cassettes (uncomment if you want to commit them)
+# /spec/fixtures/vcr_cassettes/
+
+# Byebug
+.byebug_history
+
+# Spring
+/spring/*.pid
+
+# Ignore master key for decrypting credentials and more.
+/config/master.key
+
+# Ignore application configuration
+/config/application.yml
+
+# Ignore Docker files
+docker-compose.override.yml
+
+# Ignore tmp files
+/tmp/goat/

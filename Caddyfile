@@ -1,0 +1,58 @@
+# Caddyfile for Eurosky Migration
+# Automatically handles HTTPS via Let's Encrypt
+
+{
+  # Global options
+  email {$EMAIL}
+
+  # Disable HTTPS for Tailscale development (not publicly accessible)
+  auto_https off
+}
+
+# Main domain configuration
+# Serve on Tailscale domain via HTTP (port 80)
+{$DOMAIN}:80 {
+  # Reverse proxy to Rails web service
+  reverse_proxy web:3000 {
+    # Health check configuration
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Real-IP {remote_host}
+  }
+
+  # Enable compression
+  encode gzip zstd
+
+  # Security headers
+  header {
+    # Prevent clickjacking
+    X-Frame-Options "SAMEORIGIN"
+
+    # XSS protection
+    X-Content-Type-Options "nosniff"
+    X-XSS-Protection "1; mode=block"
+
+    # Referrer policy
+    Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Remove server header
+    -Server
+  }
+
+  # Logging
+  log {
+    output stdout
+    format json
+    level INFO
+  }
+
+  # Health check endpoint
+  handle /up {
+    reverse_proxy web:3000
+  }
+
+  # All other requests
+  handle {
+    reverse_proxy web:3000
+  }
+}

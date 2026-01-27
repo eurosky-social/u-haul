@@ -1,0 +1,16 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+
+development:
+  <<: *default
+  database: eurosky_migration_development
+
+test:
+  <<: *default
+  database: eurosky_migration_test
+
+production:
+  url: <%= ENV.fetch("DATABASE_URL") %>
+  <<: *default

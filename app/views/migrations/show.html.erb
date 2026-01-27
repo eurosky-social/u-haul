@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Migration <%= @migration.token %> - Eurosky Migration</title>
+  <% unless @migration.completed? || @migration.failed? %>
+    <meta http-equiv="refresh" content="10">
+  <% end %>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .header .token {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 8px 16px;
+      border-radius: 6px;
+      display: inline-block;
+      margin-top: 8px;
+    }
+
+    .content {
+      padding: 30px;
+    }
+
+    .bookmark-notice {
+      background: #e0f2fe;
+      border-left: 4px solid #0284c7;
+      padding: 16px;
+      margin-bottom: 24px;
+      border-radius: 4px;
+    }
+
+    .bookmark-notice h3 {
+      color: #075985;
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .bookmark-notice p {
+      color: #075985;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .bookmark-notice code {
+      background: rgba(255, 255, 255, 0.8);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: "SF Mono", Monaco, "Courier New", monospace;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .progress-section {
+      margin-bottom: 30px;
+    }
+
+    .progress-bar-container {
+      background: #e5e7eb;
+      height: 30px;
+      border-radius: 15px;
+      overflow: hidden;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      transition: width 0.5s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+      min-width: 40px;
+    }
+
+    .status-info {
+      margin-bottom: 24px;
+    }
+
+    .status-label {
+      font-size: 14px;
+      color: #6b7280;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .status-value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 16px;
+    }
+
+    .status-pending {
+      color: #f59e0b;
+    }
+
+    .status-in-progress {
+      color: #3b82f6;
+    }
+
+    .status-completed {
+      color: #10b981;
+    }
+
+    .status-failed {
+      color: #ef4444;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: #f9fafb;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .metric-label {
+      font-size: 13px;
+      color: #6b7280;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .metric-unit {
+      font-size: 14px;
+      color: #6b7280;
+      font-weight: 400;
+    }
+
+    .plc-token-section {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 20px;
+      margin-bottom: 24px;
+      border-radius: 4px;
+    }
+
+    .plc-token-section h3 {
+      color: #856404;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .plc-token-section .warning {
+      color: #dc2626;
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #fee;
+      border-radius: 4px;
+    }
+
+    .plc-token-section ol {
+      color: #856404;
+      margin-left: 20px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+
+    .plc-token-section li {
+      margin-bottom: 8px;
+    }
+
+    .plc-token-section a {
+      color: #0284c7;
+      font-weight: 500;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #333;
+      font-size: 14px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 15px;
+      font-family: "SF Mono", Monaco, "Courier New", monospace;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .submit-button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .submit-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(220, 38, 38, 0.3);
+    }
+
+    .submit-button:active {
+      transform: translateY(0);
+    }
+
+    .submit-button:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
+    }
+
+    .success-message {
+      background: #d1fae5;
+      border-left: 4px solid #10b981;
+      padding: 20px;
+      margin-bottom: 24px;
+      border-radius: 4px;
+    }
+
+    .success-message h3 {
+      color: #065f46;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .success-message p {
+      color: #065f46;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .error-message {
+      background: #fee;
+      border-left: 4px solid #dc2626;
+      padding: 20px;
+      margin-bottom: 24px;
+      border-radius: 4px;
+    }
+
+    .error-message h3 {
+      color: #991b1b;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .error-message pre {
+      color: #991b1b;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.5);
+      padding: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-family: "SF Mono", Monaco, "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .auto-refresh-notice {
+      text-align: center;
+      color: #6b7280;
+      font-size: 13px;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 10px;
+      }
+
+      .header {
+        padding: 20px;
+      }
+
+      .header h1 {
+        font-size: 24px;
+      }
+
+      .header .token {
+        font-size: 18px;
+      }
+
+      .content {
+        padding: 20px;
+      }
+
+      .metrics-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Migration Status</h1>
+      <div class="token"><%= @migration.token %></div>
+    </div>
+
+    <div class="content">
+      <div class="bookmark-notice" role="note">
+        <h3>Bookmark This Page</h3>
+        <p>Save this URL to track your migration progress:</p>
+        <code><%= migration_url(@migration) %></code>
+      </div>
+
+      <div class="progress-section">
+        <div class="progress-bar-container" role="progressbar" aria-valuenow="<%= @migration.progress_percentage %>" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar" style="width: <%= @migration.progress_percentage %>%">
+            <%= @migration.progress_percentage %>%
+          </div>
+        </div>
+      </div>
+
+      <div class="status-info">
+        <div class="status-label">Current Status</div>
+        <div class="status-value status-<%= @migration.completed? ? 'completed' : @migration.failed? ? 'failed' : 'in-progress' %>">
+          <%= @migration.status.humanize %>
+        </div>
+      </div>
+
+      <% if @migration.pending_blobs? %>
+        <div class="metrics-grid">
+          <% if @migration.progress_data['blobs'].present? %>
+            <% blobs = @migration.progress_data['blobs'].values %>
+            <% total_blobs = blobs.count %>
+            <% total_size = blobs.sum { |b| b['size'].to_i } %>
+            <% uploaded_size = blobs.sum { |b| b['uploaded'].to_i } %>
+
+            <div class="metric-card">
+              <div class="metric-label">Blobs Uploaded</div>
+              <div class="metric-value">
+                <%= total_blobs %>
+                <span class="metric-unit">files</span>
+              </div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Data Transferred</div>
+              <div class="metric-value">
+                <%= number_to_human_size(uploaded_size) %>
+                <span class="metric-unit">/ <%= number_to_human_size(total_size) %></span>
+              </div>
+            </div>
+
+            <% if @migration.estimated_time_remaining %>
+              <div class="metric-card">
+                <div class="metric-label">Time Remaining</div>
+                <div class="metric-value">
+                  <%= distance_of_time_in_words(@migration.estimated_time_remaining) %>
+                </div>
+              </div>
+            <% end %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% if @migration.pending_plc? %>
+        <div class="plc-token-section" role="alert">
+          <h3>Action Required: PLC Token</h3>
+
+          <div class="warning">
+            ⚠️ POINT OF NO RETURN - Once you submit the PLC token, your DID will be updated and this cannot be undone.
+          </div>
+
+          <p style="margin-bottom: 16px; color: #856404; font-size: 14px;">
+            Your account data has been successfully migrated. Now you need to update your DID document to point to your new PDS.
+          </p>
+
+          <ol>
+            <li>Go to <a href="https://plc.directory" target="_blank" rel="noopener">plc.directory</a></li>
+            <li>Enter your DID: <code style="background: rgba(255,255,255,0.8); padding: 2px 6px; border-radius: 3px;"><%= @migration.did %></code></li>
+            <li>Click "Request a PLC operation token"</li>
+            <li>Check your email for the token</li>
+            <li>Enter the token below and submit</li>
+          </ol>
+
+          <%= form_with model: @migration, url: submit_plc_token_migration_path(@migration), method: :patch, local: true do |f| %>
+            <div class="form-group">
+              <%= f.label :plc_token, "PLC Operation Token" %>
+              <%= f.text_field :plc_token, required: true, placeholder: "Enter token from email", autocomplete: "off" %>
+            </div>
+
+            <%= f.submit "Submit Token & Complete Migration", class: "submit-button", onclick: "return confirm('WARNING: This will permanently update your DID to point to the new PDS. This action CANNOT be undone. Are you absolutely sure you want to proceed?');" %>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% if @migration.completed? %>
+        <div class="success-message" role="alert">
+          <h3>Migration Completed Successfully!</h3>
+          <p>
+            Your account has been successfully migrated to <strong><%= @migration.new_pds_host %></strong>.
+            You can now log in with your new handle: <strong><%= @migration.new_handle %></strong>
+          </p>
+          <p style="margin-top: 12px;">
+            Your old account credentials have been securely deleted. Welcome to your new home!
+          </p>
+        </div>
+      <% end %>
+
+      <% if @migration.failed? %>
+        <div class="error-message" role="alert">
+          <h3>Migration Failed</h3>
+          <% if @migration.last_error %>
+            <pre><%= @migration.last_error %></pre>
+          <% else %>
+            <p style="color: #991b1b; font-size: 14px;">An unknown error occurred during migration.</p>
+          <% end %>
+          <p style="margin-top: 12px; color: #991b1b; font-size: 14px;">
+            Please contact support with your migration token: <strong><%= @migration.token %></strong>
+          </p>
+        </div>
+      <% end %>
+
+      <% unless @migration.completed? || @migration.failed? %>
+        <div class="auto-refresh-notice" role="status" aria-live="polite">
+          This page will automatically refresh every 10 seconds to show the latest status.
+        </div>
+      <% end %>
+    </div>
+  </div>
+</body>
+</html>
