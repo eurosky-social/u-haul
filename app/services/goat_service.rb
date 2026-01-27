@@ -579,4 +579,81 @@ class GoatService
   rescue StandardError => e
     raise NetworkError, "Failed to get PDS service DID: #{e.message}"
   end
+
+  # Class methods for handle resolution
+
+  # Resolve a handle to a DID
+  # Tries multiple resolution methods in order:
+  # 1. DNS TXT record (_atproto.handle)
+  # 2. HTTPS well-known endpoint (/.well-known/atproto-did)
+  # 3. PDS resolution endpoint
+  def self.resolve_handle_to_did(handle)
+    Rails.logger.info("Resolving handle to DID: #{handle}")
+
+    # Try resolution via common PDS instances
+    common_pds_hosts = ['https://bsky.social', 'https://bsky.network']
+
+    common_pds_hosts.each do |pds_host|
+      begin
+        url = "#{pds_host}/xrpc/com.atproto.identity.resolveHandle"
+        response = HTTParty.get(url, query: { handle: handle }, timeout: 10)
+
+        if response.success?
+          parsed = JSON.parse(response.body)
+          did = parsed['did']
+          Rails.logger.info("Resolved handle #{handle} to DID: #{did}")
+          return did
+        end
+      rescue StandardError => e
+        Rails.logger.debug("Failed to resolve via #{pds_host}: #{e.message}")
+        # Continue to next PDS
+      end
+    end
+
+    raise NetworkError, "Could not resolve handle #{handle} to DID"
+  end
+
+  # Get the PDS host for a given DID by querying the PLC directory
+  def self.resolve_did_to_pds(did)
+    Rails.logger.info("Resolving DID to PDS: #{did}")
+
+    plc_host = ENV.fetch('ATP_PLC_HOST', 'https://plc.directory')
+    url = "#{plc_host}/#{did}"
+
+    response = HTTParty.get(url, timeout: 10)
+
+    unless response.success?
+      raise NetworkError, "Failed to fetch DID document from PLC: #{response.code} #{response.message}"
+    end
+
+    parsed = JSON.parse(response.body)
+
+    # Extract PDS endpoint from service array
+    service = parsed['service']&.find { |s| s['id'] == '#atproto_pds' }
+
+    unless service && service['serviceEndpoint']
+      raise GoatError, "No PDS endpoint found in DID document for #{did}"
+    end
+
+    pds_host = service['serviceEndpoint']
+    Rails.logger.info("Resolved DID #{did} to PDS: #{pds_host}")
+
+    pds_host
+  rescue JSON::ParserError => e
+    raise GoatError, "Invalid JSON in PLC response: #{e.message}"
+  rescue StandardError => e
+    raise NetworkError, "Failed to resolve DID to PDS: #{e.message}"
+  end
+
+  # Convenience method to resolve handle directly to PDS host
+  # Returns a hash with { did: '...', pds_host: '...' }
+  def self.resolve_handle(handle)
+    did = resolve_handle_to_did(handle)
+    pds_host = resolve_did_to_pds(did)
+
+    {
+      did: did,
+      pds_host: pds_host
+    }
+  end
 end

@@ -203,7 +203,155 @@
         padding: 20px;
       }
     }
+
+    .field-error {
+      border-color: #dc2626 !important;
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+    }
+
+    .error-message {
+      color: #dc2626;
+      font-size: 13px;
+      margin-top: 4px;
+      display: none;
+    }
+
+    .error-message.visible {
+      display: block;
+    }
   </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.querySelector('form');
+
+      // Field definitions with validation rules
+      const fields = {
+        email: {
+          element: document.getElementById('migration_email'),
+          errorElement: document.getElementById('email-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'Email address is required';
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(value)) return 'Please enter a valid email address';
+            return null;
+          }
+        },
+        old_handle: {
+          element: document.getElementById('migration_old_handle'),
+          errorElement: document.getElementById('old-handle-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'Old handle is required';
+            if (!value.includes('.')) return 'Handle must include a domain (e.g., user.bsky.social)';
+            return null;
+          }
+        },
+        password: {
+          element: document.getElementById('migration_password'),
+          errorElement: document.getElementById('password-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'Password is required';
+            if (value.length < 8) return 'Password must be at least 8 characters';
+            return null;
+          }
+        },
+        new_pds_host: {
+          element: document.getElementById('migration_new_pds_host'),
+          errorElement: document.getElementById('new-pds-host-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'New PDS host is required';
+            // Accept both with and without https://
+            const urlRegex = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
+            if (!urlRegex.test(value)) return 'Please enter a valid PDS host (e.g., pds.example.com)';
+            return null;
+          }
+        },
+        new_handle: {
+          element: document.getElementById('migration_new_handle'),
+          errorElement: document.getElementById('new-handle-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'New handle is required';
+            if (!value.includes('.')) return 'Handle must include a domain (e.g., user.eurosky.social)';
+            return null;
+          }
+        }
+      };
+
+      // Validate a single field
+      function validateField(fieldName) {
+        const field = fields[fieldName];
+        if (!field || !field.element) return true;
+
+        const value = field.element.value;
+        const error = field.validate(value);
+
+        if (error) {
+          field.element.classList.add('field-error');
+          if (field.errorElement) {
+            field.errorElement.textContent = error;
+            field.errorElement.classList.add('visible');
+          }
+          return false;
+        } else {
+          field.element.classList.remove('field-error');
+          if (field.errorElement) {
+            field.errorElement.classList.remove('visible');
+          }
+          return true;
+        }
+      }
+
+      // Validate all fields
+      function validateAllFields() {
+        let isValid = true;
+        Object.keys(fields).forEach(function(fieldName) {
+          if (!validateField(fieldName)) {
+            isValid = false;
+          }
+        });
+        return isValid;
+      }
+
+      // Add real-time validation on blur
+      Object.keys(fields).forEach(function(fieldName) {
+        const field = fields[fieldName];
+        if (field.element) {
+          field.element.addEventListener('blur', function() {
+            validateField(fieldName);
+          });
+
+          // Clear error on input
+          field.element.addEventListener('input', function() {
+            if (field.element.classList.contains('field-error')) {
+              validateField(fieldName);
+            }
+          });
+        }
+      });
+
+      // Form submission with validation
+      form.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        // Validate all fields first
+        if (!validateAllFields()) {
+          // Scroll to first error
+          const firstError = document.querySelector('.field-error');
+          if (firstError) {
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstError.focus();
+          }
+          return false;
+        }
+
+        // Show confirmation dialog only if validation passes
+        const confirmed = confirm('Are you ready to start the migration? This process will begin immediately and cannot be stopped once started.');
+
+        if (confirmed) {
+          form.submit();
+        }
+      });
+    });
+  </script>
 </head>
 <body>
   <div class="container">
@@ -235,41 +383,40 @@
         </ul>
       </div>
 
-      <%= form_with model: @migration, url: migrations_path, local: true, html: { novalidate: false } do |f| %>
+      <%= form_with model: @migration, url: migrations_path, local: true, html: { novalidate: true } do |f| %>
         <div class="form-group">
           <%= f.label :email, "Email Address" %>
-          <%= f.email_field :email, required: true, placeholder: "you@example.com", autocomplete: "email" %>
+          <%= f.email_field :email, id: "migration_email", placeholder: "you@example.com", autocomplete: "email" %>
           <div class="helper-text">We'll send migration status updates to this email</div>
+          <div id="email-error" class="error-message"></div>
         </div>
 
         <div class="form-group">
           <%= f.label :old_handle, "Old Handle" %>
-          <%= f.text_field :old_handle, required: true, placeholder: "yourhandle.bsky.social", autocomplete: "username" %>
-          <div class="helper-text">Your current AT Protocol handle</div>
-        </div>
-
-        <div class="form-group">
-          <%= f.label :old_pds_host, "Old PDS Host" %>
-          <%= f.text_field :old_pds_host, required: true, placeholder: "bsky.social or https://pds.example.com", autocomplete: "url" %>
-          <div class="helper-text">The hostname of your current PDS (with or without https://)</div>
+          <%= f.text_field :old_handle, id: "migration_old_handle", placeholder: "yourhandle.bsky.social", autocomplete: "username" %>
+          <div class="helper-text">Your current AT Protocol handle (we'll automatically find your PDS)</div>
+          <div id="old-handle-error" class="error-message"></div>
         </div>
 
         <div class="form-group">
           <%= f.label :password, "Account Password" %>
-          <%= f.password_field :password, required: true, autocomplete: "current-password" %>
+          <%= f.password_field :password, id: "migration_password", autocomplete: "current-password" %>
           <div class="helper-text">Your current account password for authentication</div>
+          <div id="password-error" class="error-message"></div>
         </div>
 
         <div class="form-group">
           <%= f.label :new_pds_host, "New PDS Host" %>
-          <%= f.text_field :new_pds_host, required: true, placeholder: "pds.eurosky.social or https://pds.newhost.com", autocomplete: "url" %>
+          <%= f.text_field :new_pds_host, id: "migration_new_pds_host", placeholder: "pds.eurosky.social or https://pds.newhost.com", autocomplete: "url" %>
           <div class="helper-text">The hostname of your destination PDS (with or without https://)</div>
+          <div id="new-pds-host-error" class="error-message"></div>
         </div>
 
         <div class="form-group">
           <%= f.label :new_handle, "New Handle" %>
-          <%= f.text_field :new_handle, required: true, placeholder: "yourhandle.eurosky.social", autocomplete: "username" %>
+          <%= f.text_field :new_handle, id: "migration_new_handle", placeholder: "yourhandle.eurosky.social", autocomplete: "username" %>
           <div class="helper-text">Your new AT Protocol handle on the destination PDS</div>
+          <div id="new-handle-error" class="error-message"></div>
         </div>
 
         <div class="security-note" role="note">
@@ -281,7 +428,7 @@
           </p>
         </div>
 
-        <%= f.submit "Start Migration", class: "submit-button", onclick: "return confirm('Are you ready to start the migration? This process will begin immediately and cannot be stopped once started.');" %>
+        <%= f.submit "Start Migration", class: "submit-button" %>
       <% end %>
     </div>
   </div>

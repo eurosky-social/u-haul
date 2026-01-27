@@ -41,10 +41,11 @@ class MigrationsController < ApplicationController
   # Params:
   #   - migration[email]: User's email address
   #   - migration[old_handle]: Current handle (e.g., user.bsky.social)
-  #   - migration[old_pds_host]: Current PDS host (e.g., bsky.network)
   #   - migration[new_handle]: New handle (e.g., user.example.com)
   #   - migration[new_pds_host]: New PDS host (e.g., pds.example.com)
   #   - password: Account password (stored encrypted, not mass-assigned)
+  #
+  # Note: old_pds_host and did are resolved automatically from old_handle
   #
   # Response:
   #   - Success: Redirects to status page with token
@@ -52,14 +53,36 @@ class MigrationsController < ApplicationController
   def create
     @migration = Migration.new(migration_params)
 
-    # Store the encrypted password separately (not mass-assigned)
-    @migration.set_password(params[:password]) if params[:password].present?
+    begin
+      # Resolve the old handle to get DID and PDS host
+      if @migration.old_handle.present?
+        resolution = GoatService.resolve_handle(@migration.old_handle)
+        @migration.did = resolution[:did]
+        @migration.old_pds_host = resolution[:pds_host]
 
-    if @migration.save
-      # Migration saved successfully, token generated, CreateAccountJob scheduled
-      redirect_to migration_by_token_path(@migration.token),
-                  notice: "Migration started! Track your progress with token: #{@migration.token}"
-    else
+        Rails.logger.info("Resolved handle #{@migration.old_handle}: DID=#{@migration.did}, PDS=#{@migration.old_pds_host}")
+      end
+
+      # Set the encrypted password and expiration (not mass-assigned)
+      if params[:migration][:password].present?
+        @migration.encrypted_password = params[:migration][:password]
+        @migration.credentials_expires_at = 48.hours.from_now
+      end
+
+      if @migration.save
+        # Migration saved successfully, token generated, CreateAccountJob scheduled
+        redirect_to migration_by_token_path(@migration.token),
+                    notice: "Migration started! Track your progress with token: #{@migration.token}"
+      else
+        render :new, status: :unprocessable_entity
+      end
+    rescue GoatService::NetworkError => e
+      Rails.logger.error("Failed to resolve handle #{@migration.old_handle}: #{e.message}")
+      @migration.errors.add(:old_handle, "could not be resolved. Please check that the handle is correct and try again.")
+      render :new, status: :unprocessable_entity
+    rescue StandardError => e
+      Rails.logger.error("Unexpected error during migration creation: #{e.message}")
+      @migration.errors.add(:base, "An unexpected error occurred. Please try again.")
       render :new, status: :unprocessable_entity
     end
   end
@@ -169,15 +192,14 @@ class MigrationsController < ApplicationController
   end
 
   # Strong parameters for migration creation
-  # The password is handled separately and not mass-assigned
+  # The password, old_pds_host, and did are handled separately and not mass-assigned
+  # old_pds_host and did are automatically resolved from the old_handle
   def migration_params
     params.require(:migration).permit(
       :email,
       :old_handle,
-      :old_pds_host,
       :new_handle,
-      :new_pds_host,
-      :did
+      :new_pds_host
     )
   end
 
