@@ -37,6 +37,9 @@ class ActivateAccountJob < ApplicationJob
   queue_as :critical
   retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
+  # Special handling for rate-limiting errors with longer backoff
+  retry_on GoatService::RateLimitError, wait: :polynomially_longer, attempts: 5
+
   def perform(migration)
     Rails.logger.info("Starting account activation for migration #{migration.token} (#{migration.did})")
 
@@ -89,6 +92,12 @@ class ActivateAccountJob < ApplicationJob
     Rails.logger.info("New Handle: #{migration.new_handle} @ #{migration.new_pds_host}")
     Rails.logger.info("Account is now live on new PDS")
     Rails.logger.info("=" * 80)
+
+  rescue GoatService::RateLimitError => e
+    Rails.logger.warn("Rate limit hit for migration #{migration.token}: #{e.message}")
+    Rails.logger.warn("Will retry with exponential backoff")
+    migration.update(last_error: "Rate limit: #{e.message}")
+    raise  # Re-raise to trigger ActiveJob retry with polynomially_longer backoff
 
   rescue GoatService::AuthenticationError => e
     Rails.logger.error("Authentication failed for migration #{migration.token}: #{e.message}")

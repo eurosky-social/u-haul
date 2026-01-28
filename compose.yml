@@ -1,0 +1,125 @@
+services:
+  # Autonomous PostgreSQL instance for migration tool
+  postgres-migration:
+    image: postgres:15-alpine
+    hostname: postgres-migration-${PARTITION}
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eurosky_migration_production
+    volumes:
+      - postgres_migration_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eurosky_migration_production"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Autonomous Redis instance for migration tool
+  redis-migration:
+    image: redis:7-bookworm
+    hostname: redis-migration-${PARTITION}
+    volumes:
+      - redis_migration_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Rails web application
+  migration-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: migration-${PARTITION}
+    environment:
+      RAILS_ENV: production
+      FORCE_SSL: "false"
+      DATABASE_URL: postgresql://postgres:postgres@postgres-migration-${PARTITION}:5432/eurosky_migration_production
+      REDIS_URL: redis://redis-migration-${PARTITION}:6379/0
+      RAILS_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
+      DOMAIN: migration.${PARTITION}.${DOMAIN}
+      ATP_PLC_HOST: https://plc.${PARTITION}.${DOMAIN}
+      # Allow access to PDS instances without SSRF protection
+      PDS_DISABLE_SSRF_PROTECTION: "true"
+    volumes:
+      - migration_data:/rails/tmp/goat
+    depends_on:
+      postgres-migration:
+        condition: service_healthy
+      redis-migration:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.migration.rule=Host(`migration.${PARTITION}.${DOMAIN}`)"
+      - "traefik.http.routers.migration.entrypoints=websecure"
+      - "traefik.http.routers.migration.tls.certresolver=letsencrypt"
+      - "traefik.http.services.migration.loadbalancer.server.port=3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --output-document=/dev/null http://localhost:3000/up || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Sidekiq background job processor
+  migration-sidekiq:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: migration-sidekiq-${PARTITION}
+    command: bundle exec sidekiq -C config/sidekiq.yml
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@postgres-migration-${PARTITION}:5432/eurosky_migration_production
+      REDIS_URL: redis://redis-migration-${PARTITION}:6379/0
+      RAILS_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
+      ATP_PLC_HOST: https://plc.${PARTITION}.${DOMAIN}
+      PDS_DISABLE_SSRF_PROTECTION: "true"
+    volumes:
+      - migration_data:/rails/tmp/goat
+    depends_on:
+      postgres-migration:
+        condition: service_healthy
+      redis-migration:
+        condition: service_healthy
+      migration-web:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pgrep -f sidekiq || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # HTTPS health check (optional, only if Traefik is running)
+  migration-https-check:
+    extends:
+      file: ../templates/compose.yml
+      service: https-check
+    depends_on:
+      migration-web:
+        condition: service_healthy
+    environment:
+      HEALTHCHECK_URL: migration.${PARTITION}.${DOMAIN}
+    profiles:
+      - with-traefik
+
+volumes:
+  postgres_migration_data:
+  redis_migration_data:
+  migration_data:

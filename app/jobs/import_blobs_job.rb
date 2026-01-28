@@ -37,7 +37,9 @@
 # - Track total bytes transferred
 #
 # Error Handling:
-# - Network errors: retry individual blob (max 3 attempts)
+# - Rate-limit errors: longer exponential backoff (8s, 16s, 32s), max 3 attempts per blob
+# - Network errors: standard exponential backoff (2s, 4s, 8s), max 3 attempts per blob
+# - Job-level rate-limiting: retry entire job up to 5 times with polynomial backoff
 # - Overall job failure: mark migration as failed
 # - Log warnings for individual blob failures, don't fail entire job
 #
@@ -60,6 +62,9 @@ class ImportBlobsJob < ApplicationJob
 
   # Retry configuration (3 attempts with exponential backoff)
   retry_on StandardError, wait: :exponentially_longer, attempts: 3
+
+  # Special handling for rate-limiting errors with longer backoff
+  retry_on GoatService::RateLimitError, wait: :polynomially_longer, attempts: 5
 
   def perform(migration)
     logger.info("Starting blob import for migration #{migration.token} (DID: #{migration.did})")
@@ -243,6 +248,16 @@ class ImportBlobsJob < ApplicationJob
   # Download blob with retry logic
   def download_blob_with_retry(goat, cid, attempt = 1)
     goat.download_blob(cid)
+  rescue GoatService::RateLimitError => e
+    if attempt < MAX_BLOB_RETRIES
+      backoff = 2 ** (attempt + 2) # Longer backoff for rate limits: 8s, 16s, 32s
+      logger.warn("Rate limit hit downloading blob (attempt #{attempt}/#{MAX_BLOB_RETRIES}): #{cid} - retrying in #{backoff}s")
+      sleep(backoff)
+      download_blob_with_retry(goat, cid, attempt + 1)
+    else
+      logger.error("Blob download failed after #{MAX_BLOB_RETRIES} rate-limit retries: #{cid}")
+      raise
+    end
   rescue GoatService::NetworkError, GoatService::TimeoutError => e
     if attempt < MAX_BLOB_RETRIES
       logger.warn("Blob download failed (attempt #{attempt}/#{MAX_BLOB_RETRIES}): #{cid} - #{e.message}")
@@ -257,6 +272,16 @@ class ImportBlobsJob < ApplicationJob
   # Upload blob with retry logic
   def upload_blob_with_retry(goat, blob_path, attempt = 1)
     goat.upload_blob(blob_path)
+  rescue GoatService::RateLimitError => e
+    if attempt < MAX_BLOB_RETRIES
+      backoff = 2 ** (attempt + 2) # Longer backoff for rate limits: 8s, 16s, 32s
+      logger.warn("Rate limit hit uploading blob (attempt #{attempt}/#{MAX_BLOB_RETRIES}): #{blob_path} - retrying in #{backoff}s")
+      sleep(backoff)
+      upload_blob_with_retry(goat, blob_path, attempt + 1)
+    else
+      logger.error("Blob upload failed after #{MAX_BLOB_RETRIES} rate-limit retries: #{blob_path}")
+      raise
+    end
   rescue GoatService::NetworkError, GoatService::TimeoutError => e
     if attempt < MAX_BLOB_RETRIES
       logger.warn("Blob upload failed (attempt #{attempt}/#{MAX_BLOB_RETRIES}): #{blob_path} - #{e.message}")

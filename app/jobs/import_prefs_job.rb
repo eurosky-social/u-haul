@@ -23,6 +23,9 @@ class ImportPrefsJob < ApplicationJob
   queue_as :migrations
   retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
+  # Special handling for rate-limiting errors with longer backoff
+  retry_on GoatService::RateLimitError, wait: :polynomially_longer, attempts: 5
+
   def perform(migration)
     Rails.logger.info("Starting preferences import for migration #{migration.token} (#{migration.did})")
 
@@ -50,6 +53,12 @@ class ImportPrefsJob < ApplicationJob
     migration.advance_to_pending_plc!
 
     Rails.logger.info("Preferences import completed successfully for migration #{migration.token}")
+
+  rescue GoatService::RateLimitError => e
+    Rails.logger.warn("Rate limit hit for migration #{migration.token}: #{e.message}")
+    Rails.logger.warn("Will retry with exponential backoff")
+    migration.update(last_error: "Rate limit: #{e.message}")
+    raise  # Re-raise to trigger ActiveJob retry with polynomially_longer backoff
 
   rescue GoatService::AuthenticationError => e
     Rails.logger.error("Authentication failed for migration #{migration.token}: #{e.message}")

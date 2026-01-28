@@ -3,223 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Eurosky Migration - Start Account Migration</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      line-height: 1.6;
-      color: #1a1a1a;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      padding: 20px;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      overflow: hidden;
-    }
-
-    .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 30px;
-      text-align: center;
-    }
-
-    .header h1 {
-      font-size: 28px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .header p {
-      font-size: 16px;
-      opacity: 0.95;
-    }
-
-    .content {
-      padding: 30px;
-    }
-
-    .warning-box {
-      background: #fff3cd;
-      border-left: 4px solid #ffc107;
-      padding: 16px;
-      margin-bottom: 24px;
-      border-radius: 4px;
-    }
-
-    .warning-box h3 {
-      color: #856404;
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .warning-box ul {
-      color: #856404;
-      margin-left: 20px;
-      font-size: 14px;
-    }
-
-    .warning-box li {
-      margin-bottom: 4px;
-    }
-
-    .form-group {
-      margin-bottom: 20px;
-    }
-
-    label {
-      display: block;
-      font-weight: 500;
-      margin-bottom: 6px;
-      color: #333;
-      font-size: 14px;
-    }
-
-    input[type="text"],
-    input[type="email"],
-    input[type="password"] {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 15px;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-
-    input[type="text"]:focus,
-    input[type="email"]:focus,
-    input[type="password"]:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-
-    .helper-text {
-      font-size: 13px;
-      color: #6b7280;
-      margin-top: 4px;
-    }
-
-    .security-note {
-      background: #e0f2fe;
-      border-left: 4px solid #0284c7;
-      padding: 16px;
-      margin: 24px 0;
-      border-radius: 4px;
-    }
-
-    .security-note h3 {
-      color: #075985;
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .security-note p {
-      color: #075985;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .submit-button {
-      width: 100%;
-      padding: 14px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .submit-button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-    }
-
-    .submit-button:active {
-      transform: translateY(0);
-    }
-
-    .submit-button:focus {
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
-    }
-
-    .error-messages {
-      background: #fee;
-      border-left: 4px solid #dc2626;
-      padding: 16px;
-      margin-bottom: 24px;
-      border-radius: 4px;
-    }
-
-    .error-messages h3 {
-      color: #991b1b;
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .error-messages ul {
-      color: #991b1b;
-      margin-left: 20px;
-      font-size: 14px;
-    }
-
-    .error-messages li {
-      margin-bottom: 4px;
-    }
-
-    @media (max-width: 640px) {
-      body {
-        padding: 10px;
-      }
-
-      .header {
-        padding: 20px;
-      }
-
-      .header h1 {
-        font-size: 24px;
-      }
-
-      .content {
-        padding: 20px;
-      }
-    }
-
-    .field-error {
-      border-color: #dc2626 !important;
-      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
-    }
-
-    .error-message {
-      color: #dc2626;
-      font-size: 13px;
-      margin-top: 4px;
-      display: none;
-    }
-
-    .error-message.visible {
-      display: block;
-    }
-  </style>
+  <title><%= EuroskyConfig::SITE_NAME %> - Start Account Migration</title>
+  <% if EuroskyConfig::FAVICON_URL.present? %>
+    <link rel="icon" type="image/png" href="<%= EuroskyConfig::FAVICON_URL %>">
+  <% end %>
+  <%= render 'shared/styles' %>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const form = document.querySelector('form');
@@ -254,15 +42,36 @@
             return null;
           }
         },
+        <% if EuroskyConfig.invite_code_enabled? %>
+        invite_code: {
+          element: document.getElementById('migration_invite_code'),
+          errorElement: document.getElementById('invite-code-error'),
+          validate: function(value) {
+            <% if EuroskyConfig.invite_code_required? %>
+            if (!value || value.trim() === '') return 'Invite code is required';
+            <% end %>
+            // Basic format validation (alphanumeric + hyphens)
+            if (value && !/^[a-zA-Z0-9-]+$/.test(value)) {
+              return 'Invite code can only contain letters, numbers, and hyphens';
+            }
+            return null;
+          }
+        },
+        <% end %>
         new_pds_host: {
           element: document.getElementById('migration_new_pds_host'),
           errorElement: document.getElementById('new-pds-host-error'),
           validate: function(value) {
+            <% if EuroskyConfig.bound_mode? %>
+            // In bound mode, field is read-only and always valid
+            return null;
+            <% else %>
             if (!value || value.trim() === '') return 'New PDS host is required';
             // Accept both with and without https://
             const urlRegex = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
             if (!urlRegex.test(value)) return 'Please enter a valid PDS host (e.g., pds.example.com)';
             return null;
+            <% end %>
           }
         },
         new_handle: {
@@ -356,8 +165,11 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Eurosky Migration</h1>
-      <p>Migrate your AT Protocol account to a new PDS</p>
+      <% if EuroskyConfig::LOGO_URL.present? %>
+        <img src="<%= EuroskyConfig::LOGO_URL %>" alt="<%= EuroskyConfig::SITE_NAME %>" class="header-logo">
+      <% end %>
+      <h1><%= EuroskyConfig::SITE_NAME %></h1>
+      <p><%= EuroskyConfig::SITE_SUBTITLE %></p>
     </div>
 
     <div class="content">
@@ -405,11 +217,42 @@
           <div id="password-error" class="error-message"></div>
         </div>
 
+        <% if EuroskyConfig.invite_code_enabled? %>
+          <div class="form-group">
+            <%= f.label :invite_code, "Invite Code#{' (required)' if EuroskyConfig.invite_code_required?}".html_safe %>
+            <%= f.text_field :invite_code,
+                             id: "migration_invite_code",
+                             placeholder: "Enter your invite code",
+                             autocomplete: "off",
+                             required: EuroskyConfig.invite_code_required? %>
+            <div class="helper-text">
+              <% if EuroskyConfig.invite_code_required? %>
+                An invite code is required to create an account on this PDS
+              <% else %>
+                Optional invite code if your target PDS requires one
+              <% end %>
+            </div>
+            <div id="invite-code-error" class="error-message"></div>
+          </div>
+        <% end %>
+
         <div class="form-group">
           <%= f.label :new_pds_host, "New PDS Host" %>
-          <%= f.text_field :new_pds_host, id: "migration_new_pds_host", placeholder: "pds.eurosky.social or https://pds.newhost.com", autocomplete: "url" %>
-          <div class="helper-text">The hostname of your destination PDS (with or without https://)</div>
-          <div id="new-pds-host-error" class="error-message"></div>
+          <% if EuroskyConfig.bound_mode? %>
+            <%= f.text_field :new_pds_host,
+                             id: "migration_new_pds_host",
+                             value: EuroskyConfig::TARGET_PDS_HOST,
+                             readonly: true,
+                             class: "readonly-field" %>
+            <div class="helper-text">This migration service is configured for <%= EuroskyConfig::TARGET_PDS_HOST %></div>
+          <% else %>
+            <%= f.text_field :new_pds_host,
+                             id: "migration_new_pds_host",
+                             placeholder: "pds.eurosky.social or https://pds.newhost.com",
+                             autocomplete: "url" %>
+            <div class="helper-text">The hostname of your destination PDS (with or without https://)</div>
+            <div id="new-pds-host-error" class="error-message"></div>
+          <% end %>
         </div>
 
         <div class="form-group">

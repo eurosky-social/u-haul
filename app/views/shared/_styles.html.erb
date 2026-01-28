@@ -1,0 +1,240 @@
+<style>
+  :root {
+    --primary-color: <%= EuroskyConfig::PRIMARY_COLOR %>;
+    --secondary-color: <%= EuroskyConfig::SECONDARY_COLOR %>;
+    --gradient: <%= EuroskyConfig.gradient_css %>;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: var(--gradient);
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .container {
+    max-width: 600px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+  }
+
+  .header {
+    background: var(--gradient);
+    color: white;
+    padding: 30px;
+    text-align: center;
+  }
+
+  .header h1 {
+    font-size: 28px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    font-size: 16px;
+    opacity: 0.95;
+  }
+
+  <% if EuroskyConfig::LOGO_URL.present? %>
+  .header-logo {
+    max-width: 200px;
+    max-height: 80px;
+    margin-bottom: 16px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  <% end %>
+
+  .content {
+    padding: 30px;
+  }
+
+  .warning-box {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 16px;
+    margin-bottom: 24px;
+    border-radius: 4px;
+  }
+
+  .warning-box h3 {
+    color: #856404;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .warning-box ul {
+    color: #856404;
+    margin-left: 20px;
+    font-size: 14px;
+  }
+
+  .warning-box li {
+    margin-bottom: 4px;
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 14px;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 15px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input[type="text"]:focus,
+  input[type="email"]:focus,
+  input[type="password"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .readonly-field {
+    background-color: #f3f4f6 !important;
+    color: #6b7280;
+    cursor: not-allowed;
+    border: 1px solid #d1d5db !important;
+  }
+
+  .helper-text {
+    font-size: 13px;
+    color: #6b7280;
+    margin-top: 4px;
+  }
+
+  .security-note {
+    background: #e0f2fe;
+    border-left: 4px solid #0284c7;
+    padding: 16px;
+    margin: 24px 0;
+    border-radius: 4px;
+  }
+
+  .security-note h3 {
+    color: #075985;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .security-note p {
+    color: #075985;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .submit-button {
+    width: 100%;
+    padding: 14px;
+    background: var(--gradient);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .submit-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+  }
+
+  .submit-button:active {
+    transform: translateY(0);
+  }
+
+  .submit-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+  }
+
+  .error-messages {
+    background: #fee;
+    border-left: 4px solid #dc2626;
+    padding: 16px;
+    margin-bottom: 24px;
+    border-radius: 4px;
+  }
+
+  .error-messages h3 {
+    color: #991b1b;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .error-messages ul {
+    color: #991b1b;
+    margin-left: 20px;
+    font-size: 14px;
+  }
+
+  .error-messages li {
+    margin-bottom: 4px;
+  }
+
+  @media (max-width: 640px) {
+    body {
+      padding: 10px;
+    }
+
+    .header {
+      padding: 20px;
+    }
+
+    .header h1 {
+      font-size: 24px;
+    }
+
+    .content {
+      padding: 20px;
+    }
+  }
+
+  .field-error {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1) !important;
+  }
+
+  .error-message {
+    color: #dc2626;
+    font-size: 13px;
+    margin-top: 4px;
+    display: none;
+  }
+
+  .error-message.visible {
+    display: block;
+  }
+</style>

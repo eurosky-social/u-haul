@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_01_27_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_01_28_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -32,8 +32,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_01_27_000001) do
     t.integer "retry_count", default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "encrypted_invite_code"
+    t.datetime "invite_code_expires_at"
     t.index ["created_at"], name: "index_migrations_on_created_at"
     t.index ["did"], name: "index_migrations_on_did", unique: true
+    t.index ["invite_code_expires_at"], name: "index_migrations_on_invite_code_expires_at"
     t.index ["status"], name: "index_migrations_on_status"
     t.index ["token"], name: "index_migrations_on_token", unique: true
   end

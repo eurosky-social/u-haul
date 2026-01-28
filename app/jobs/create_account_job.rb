@@ -25,6 +25,9 @@ class CreateAccountJob < ApplicationJob
   queue_as :migrations
   retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
+  # Special handling for rate-limiting errors with longer backoff
+  retry_on GoatService::RateLimitError, wait: :polynomially_longer, attempts: 5
+
   def perform(migration_id)
     migration = Migration.find(migration_id)
 
@@ -65,6 +68,12 @@ class CreateAccountJob < ApplicationJob
   rescue ActiveRecord::RecordNotFound => e
     Rails.logger.error("[CreateAccountJob] Migration not found: #{migration_id}")
     # Don't retry if migration doesn't exist
+
+  rescue GoatService::RateLimitError => e
+    Rails.logger.warn("[CreateAccountJob] Rate limit hit for migration #{migration&.token}: #{e.message}")
+    Rails.logger.warn("[CreateAccountJob] Will retry with exponential backoff")
+    migration&.update(last_error: "Rate limit: #{e.message}")
+    raise  # Re-raise to trigger ActiveJob retry with polynomially_longer backoff
 
   rescue GoatService::AuthenticationError => e
     Rails.logger.error("[CreateAccountJob] Authentication failed for migration #{migration&.token}: #{e.message}")

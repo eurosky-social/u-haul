@@ -33,6 +33,11 @@ class MigrationsController < ApplicationController
   # Display the migration form where users enter their account details
   def new
     @migration = Migration.new
+
+    # Pre-populate new_pds_host in bound mode
+    if EuroskyConfig.bound_mode?
+      @migration.new_pds_host = EuroskyConfig::TARGET_PDS_HOST
+    end
   end
 
   # POST /migrations
@@ -67,6 +72,12 @@ class MigrationsController < ApplicationController
       if params[:migration][:password].present?
         @migration.encrypted_password = params[:migration][:password]
         @migration.credentials_expires_at = 48.hours.from_now
+      end
+
+      # Set the invite code if provided and enabled (not mass-assigned)
+      if EuroskyConfig.invite_code_enabled? && params[:migration][:invite_code].present?
+        @migration.encrypted_invite_code = params[:migration][:invite_code]
+        @migration.invite_code_expires_at = 48.hours.from_now
       end
 
       if @migration.save
@@ -192,15 +203,18 @@ class MigrationsController < ApplicationController
   end
 
   # Strong parameters for migration creation
-  # The password, old_pds_host, and did are handled separately and not mass-assigned
+  # The password, invite_code, old_pds_host, and did are handled separately and not mass-assigned
   # old_pds_host and did are automatically resolved from the old_handle
   def migration_params
-    params.require(:migration).permit(
-      :email,
-      :old_handle,
-      :new_handle,
-      :new_pds_host
-    )
+    allowed = [:email, :old_handle, :new_handle]
+
+    # Add new_pds_host only in standalone mode
+    allowed << :new_pds_host if EuroskyConfig.standalone_mode?
+
+    # Note: invite_code and password are handled separately for encryption
+    # They are not mass-assigned through permit
+
+    params.require(:migration).permit(*allowed)
   end
 
   # Format migration data for JSON API response

@@ -23,6 +23,7 @@
 #   All methods raise specific exceptions on failure:
 #   - AuthenticationError: Login or session failures
 #   - NetworkError: HTTP/API communication failures
+#   - RateLimitError: PDS rate-limiting (HTTP 429)
 #   - TimeoutError: Operations exceeding timeout limits
 #   - GoatError: General goat CLI or operation failures
 #
@@ -47,6 +48,7 @@ class GoatService
   class AuthenticationError < GoatError; end
   class NetworkError < GoatError; end
   class TimeoutError < GoatError; end
+  class RateLimitError < NetworkError; end  # Raised when PDS rate-limits our requests
 
   DEFAULT_TIMEOUT = 300 # 5 minutes
 
@@ -120,7 +122,8 @@ class GoatService
   def create_account_on_new_pds(service_auth_token)
     logger.info("Creating account on new PDS with existing DID")
 
-    execute_goat(
+    # Build command arguments
+    args = [
       'account', 'create',
       '--pds-host', migration.new_pds_host,
       '--existing-did', migration.did,
@@ -128,7 +131,15 @@ class GoatService
       '--password', migration.encrypted_password,
       '--email', migration.email,
       '--service-auth', service_auth_token
-    )
+    ]
+
+    # Add invite code if present
+    if migration.invite_code.present?
+      logger.info("Including invite code for account creation")
+      args += ['--invite-code', migration.invite_code]
+    end
+
+    execute_goat(*args)
 
     logger.info("Account created on new PDS")
   rescue StandardError => e
@@ -206,6 +217,12 @@ class GoatService
     )
 
     unless response.success?
+      # Check for rate-limiting
+      if response.code == 429
+        logger.warn("Rate limit hit while listing blobs: #{response.code} #{response.message}")
+        raise RateLimitError, "PDS rate limit exceeded while listing blobs: #{response.code} #{response.message}"
+      end
+
       raise NetworkError, "Failed to list blobs: #{response.code} #{response.message}"
     end
 
@@ -215,6 +232,8 @@ class GoatService
     parsed
   rescue JSON::ParserError => e
     raise GoatError, "Failed to parse blob list response: #{e.message}"
+  rescue RateLimitError
+    raise  # Re-raise rate limit errors
   rescue StandardError => e
     raise NetworkError, "Failed to list blobs: #{e.message}"
   end
@@ -237,6 +256,12 @@ class GoatService
     )
 
     unless response.success?
+      # Check for rate-limiting
+      if response.code == 429
+        logger.warn("Rate limit hit while downloading blob #{cid}: #{response.code} #{response.message}")
+        raise RateLimitError, "PDS rate limit exceeded while downloading blob: #{response.code} #{response.message}"
+      end
+
       raise NetworkError, "Failed to download blob: #{response.code} #{response.message}"
     end
 
@@ -246,6 +271,8 @@ class GoatService
     logger.info("Blob downloaded: #{blob_path} (#{file_size_kb.round(2)} KB)")
 
     blob_path.to_s
+  rescue RateLimitError
+    raise  # Re-raise rate limit errors
   rescue StandardError => e
     raise NetworkError, "Failed to download blob #{cid}: #{e.message}"
   end
@@ -273,6 +300,12 @@ class GoatService
     )
 
     unless response.success?
+      # Check for rate-limiting
+      if response.code == 429
+        logger.warn("Rate limit hit while uploading blob: #{response.code} #{response.message}")
+        raise RateLimitError, "PDS rate limit exceeded while uploading blob: #{response.code} #{response.message}"
+      end
+
       raise NetworkError, "Failed to upload blob: #{response.code} #{response.message}"
     end
 
@@ -282,6 +315,8 @@ class GoatService
     parsed
   rescue JSON::ParserError => e
     raise GoatError, "Failed to parse upload response: #{e.message}"
+  rescue RateLimitError
+    raise  # Re-raise rate limit errors
   rescue StandardError => e
     raise NetworkError, "Failed to upload blob: #{e.message}"
   end
@@ -494,6 +529,13 @@ class GoatService
 
     unless status.success?
       error_msg = stderr.empty? ? stdout : stderr
+
+      # Check for rate-limiting errors first
+      if rate_limit_error?(error_msg)
+        logger.warn("Rate limit detected in goat command: #{error_msg}")
+        raise RateLimitError, "PDS rate limit exceeded: #{error_msg}"
+      end
+
       raise GoatError, "goat command failed: #{error_msg}"
     end
 
@@ -518,6 +560,19 @@ class GoatService
     end
 
     [stdout, stderr, status]
+  end
+
+  # Detect rate-limiting errors from goat CLI output
+  # Checks for HTTP 429 status codes and rate-limit error messages
+  def rate_limit_error?(error_msg)
+    return false if error_msg.nil? || error_msg.empty?
+
+    # Check for common rate-limit indicators
+    error_msg.include?('HTTP 429') ||
+      error_msg.include?('RateLimitExceeded') ||
+      error_msg.include?('Too Many Requests') ||
+      error_msg.include?('rate limit') ||
+      error_msg.match?(/API request failed \(HTTP 429\)/)
   end
 
   # Get access token from goat session

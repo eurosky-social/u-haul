@@ -36,6 +36,9 @@ class UpdatePlcJob < ApplicationJob
   queue_as :critical
   retry_on StandardError, wait: 30.seconds, attempts: 1
 
+  # Special handling for rate-limiting errors - retry more times for this critical job
+  retry_on GoatService::RateLimitError, wait: :polynomially_longer, attempts: 3
+
   def perform(migration)
     Rails.logger.info("CRITICAL: Starting PLC update for migration #{migration.token} (#{migration.did})")
     Rails.logger.info("This is the point of no return - the DID will be pointed to the new PDS")
@@ -90,6 +93,12 @@ class UpdatePlcJob < ApplicationJob
     migration.advance_to_pending_activation!
 
     Rails.logger.info("PLC update completed successfully for migration #{migration.token}")
+
+  rescue GoatService::RateLimitError => e
+    Rails.logger.warn("CRITICAL JOB: Rate limit hit for migration #{migration.token}: #{e.message}")
+    Rails.logger.warn("Will retry with exponential backoff (up to 3 attempts for this critical job)")
+    migration.update(last_error: "Rate limit: #{e.message}")
+    raise  # Re-raise to trigger ActiveJob retry with polynomially_longer backoff
 
   rescue GoatService::AuthenticationError => e
     Rails.logger.error("CRITICAL FAILURE: Authentication failed for migration #{migration.token}: #{e.message}")

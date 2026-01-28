@@ -14,7 +14,7 @@ if ENV['LOCKBOX_MASTER_KEY'].present?
   ENV['LOCKBOX_MASTER_KEY']
 elsif ENV['SECRET_KEY_BASE'].present?
   # Derive a Lockbox key from Rails SECRET_KEY_BASE
-  # Use first 32 bytes (256 bits) for AES-256-GCM
+  # SECRET_KEY_BASE is hex-encoded, so we need 32 hex chars = 16 bytes
   ENV['LOCKBOX_MASTER_KEY'] = ENV['SECRET_KEY_BASE'][0, 32]
 elsif !Rails.env.production?
   # Development fallback - warn about temporary key

@@ -15,6 +15,7 @@ class Migration < ApplicationRecord
   # Encryption for sensitive fields
   encrypts :encrypted_password
   encrypts :encrypted_plc_token
+  encrypts :encrypted_invite_code
 
   # Validations
   validates :did, presence: true, uniqueness: true, format: { with: /\Adid:[a-z0-9:]+\z/i }
@@ -25,6 +26,9 @@ class Migration < ApplicationRecord
   validates :old_handle, :new_handle, presence: true
   validates :retry_count, numericality: { greater_than_or_equal_to: 0, only_integer: true }
   validates :estimated_memory_mb, numericality: { greater_than_or_equal_to: 0, only_integer: true }
+
+  # Validate invite code if required by configuration
+  validates :encrypted_invite_code, presence: true, if: -> { EuroskyConfig.invite_code_required? && new_record? }
 
   # Callbacks
   before_validation :generate_token, on: :create
@@ -161,6 +165,22 @@ class Migration < ApplicationRecord
 
   def credentials_expired?
     credentials_expires_at.nil? || credentials_expires_at < Time.current
+  end
+
+  # Invite code management
+  def set_invite_code(code)
+    self.encrypted_invite_code = code
+    self.invite_code_expires_at = 48.hours.from_now
+    save!
+  end
+
+  def invite_code
+    return nil if invite_code_expired?
+    encrypted_invite_code
+  end
+
+  def invite_code_expired?
+    invite_code_expires_at.nil? || invite_code_expires_at < Time.current
   end
 
   private
