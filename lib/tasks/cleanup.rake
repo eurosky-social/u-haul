@@ -6,7 +6,7 @@ namespace :migration do
 
     if pds_host.nil? || did.nil?
       puts "Usage: bundle exec rake migration:check_orphaned[PDS_HOST,DID]"
-      puts "Example: bundle exec rake migration:check_orphaned[https://pds.local.theeverythingapp.de,did:plc:osjy3pwv4rnjiz7orw44gt3t]"
+      puts "Example: bundle exec rake migration:check_orphaned[https://pds.example.com,did:plc:example123abc]"
       exit 1
     end
 

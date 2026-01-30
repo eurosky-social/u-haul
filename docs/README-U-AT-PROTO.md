@@ -17,7 +17,7 @@ It can communicate with the PDS instances in the u-at-proto environment to perfo
 ### 1. Start the entire u-at-proto stack (including migration tool)
 
 ```bash
-cd /Users/svogelsang/Development/projects/Skeets/code/u-at-proto
+cd u-at-proto
 
 # Start all services
 docker compose up -d
@@ -27,7 +27,7 @@ docker compose ps
 ```
 
 The migration tool will be available at:
-- **With Traefik**: https://migration.local.theeverythingapp.de
+- **With Traefik**: https://migration.local.example.com
 - **Direct access**: Run the standalone version separately (see below)
 
 ### 2. Start only the migration tool (without Traefik)
@@ -35,7 +35,7 @@ The migration tool will be available at:
 If you want to test the migration tool without the full u-at-proto stack:
 
 ```bash
-cd /Users/svogelsang/Development/projects/Skeets/code/u-at-proto
+cd u-at-proto
 
 # Start only migration services
 docker compose up -d postgres-migration redis-migration migration-web migration-sidekiq
@@ -49,35 +49,35 @@ docker compose up -d postgres-migration redis-migration migration-web migration-
 For development and testing, you can run the standalone version:
 
 ```bash
-cd /Users/svogelsang/Development/projects/Skeets/code/u-at-proto/eurosky-migration
+cd u-at-proto/eurosky-migration
 
 # Start standalone version
 docker compose up -d
 
 # Access at
 # http://localhost:3000
-# or http://sebastians-macbook-pro.tail8379bb.ts.net:3000
+# or http://your-machine.tailscale-domain.ts.net:3000
 ```
 
 ## Testing Migration Between PDS Instances
 
 ### Scenario: Migrate account from PDS to PDS2
 
-1. **Create a test account on PDS (pds.local.theeverythingapp.de)**
+1. **Create a test account on PDS (pds.local.example.com)**
    - Use the u-at-proto test scripts or manual account creation
-   - Note the handle (e.g., `user.pds.local.theeverythingapp.de`)
+   - Note the handle (e.g., `user.pds.local.example.com`)
    - Note the password
 
 2. **Access the migration tool**
-   - Open https://migration.local.theeverythingapp.de (if using Traefik)
+   - Open https://migration.local.example.com (if using Traefik)
    - Or http://localhost:3000 (if using standalone)
 
 3. **Fill out the migration form**
    - **Email**: your-email@example.com
-   - **Old Handle**: user.pds.local.theeverythingapp.de
+   - **Old Handle**: user.pds.local.example.com
    - **Password**: [your test account password]
-   - **New PDS Host**: pds2.local.theeverythingapp.de
-   - **New Handle**: user.pds2.local.theeverythingapp.de
+   - **New PDS Host**: pds2.local.example.com
+   - **New Handle**: user.pds2.local.example.com
 
 4. **Monitor the migration**
    - The status page will auto-refresh every 10 seconds
@@ -106,7 +106,7 @@ eurosky-migration/
 ### Network Communication
 
 - **Migration tool → PDS instances**: HTTP/HTTPS via Docker network
-- **Migration tool → PLC directory**: https://plc.local.theeverythingapp.de
+- **Migration tool → PLC directory**: https://plc.local.example.com
 - **User → Migration tool**: HTTPS via Traefik or direct HTTP
 
 ### Data Isolation
@@ -118,22 +118,22 @@ Each component has its own volumes:
 
 ## Environment Variables
 
-Set in `/Users/svogelsang/Development/projects/Skeets/code/u-at-proto/.env`:
+Set in `u-at-proto/.env`:
 
 ```bash
 # Required
-MIGRATION_MASTER_KEY=183aa0e598bd9bbd3e6f5718081b3db9
+MIGRATION_MASTER_KEY=your-master-key-here
 
 # Domain Configuration (inherited)
-DOMAIN=theeverythingapp.de
+DOMAIN=example.com
 PARTITION=local
 ```
 
 The migration tool will use:
 - Database: `postgresql://postgres:postgres@postgres-migration-local:5432/eurosky_migration_production`
 - Redis: `redis://redis-migration-local:6379/0`
-- PLC: `https://plc.local.theeverythingapp.de`
-- Domain: `migration.local.theeverythingapp.de`
+- PLC: `https://plc.local.example.com`
+- Domain: `migration.local.example.com`
 
 ## Useful Commands
 
@@ -183,7 +183,7 @@ docker compose restart migration-web migration-sidekiq
 
 1. Check Traefik is running: `docker compose ps traefik`
 2. Check Traefik logs: `docker compose logs traefik`
-3. Verify DNS is configured: `https://migration.local.theeverythingapp.de` resolves
+3. Verify DNS is configured: `https://migration.local.example.com` resolves
 4. Check migration-web health: `docker compose ps migration-web`
 
 ### Handle resolution failing
@@ -193,7 +193,7 @@ The migration tool resolves handles to DIDs and PDS hosts automatically. If this
 1. Check PLC directory is running: `docker compose ps plc`
 2. Test manual resolution:
    ```bash
-   curl https://plc.local.theeverythingapp.de/did:plc:xxxxx
+   curl https://plc.local.example.com/did:plc:xxxxx
    ```
 3. Check migration-web logs for resolution errors
 

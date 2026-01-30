@@ -5,8 +5,8 @@
 
 set -e
 
-DID="${1:-did:plc:osjy3pwv4rnjiz7orw44gt3t}"
-PDS_HOST="pds.local.theeverythingapp.de"
+DID="${1:-did:plc:example123abc}"
+PDS_HOST="pds.example.com"
 
 echo "Cleaning up orphaned account via database"
 echo "PDS: $PDS_HOST"

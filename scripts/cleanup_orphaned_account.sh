@@ -4,8 +4,8 @@
 
 set -e
 
-PDS_HOST="${1:-https://pds.local.theeverythingapp.de}"
-DID="${2:-did:plc:osjy3pwv4rnjiz7orw44gt3t}"
+PDS_HOST="${1:-https://pds.example.com}"
+DID="${2:-did:plc:example123abc}"
 ADMIN_PASSWORD="${3}"
 
 if [ -z "$ADMIN_PASSWORD" ]; then

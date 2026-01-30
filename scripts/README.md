@@ -16,20 +16,20 @@ However, when you check the PDS web interface or API, the account appears to not
 
 ```bash
 # Via rake task (from inside docker container)
-docker compose exec web rake migration:check_orphaned[https://pds.local.theeverythingapp.de,did:plc:osjy3pwv4rnjiz7orw44gt3t]
+docker compose exec web rake migration:check_orphaned[https://pds.example.com,did:plc:example123abc]
 
 # Via curl
-curl -s "https://pds.local.theeverythingapp.de/xrpc/com.atproto.repo.describeRepo?repo=did:plc:osjy3pwv4rnjiz7orw44gt3t"
+curl -s "https://pds.example.com/xrpc/com.atproto.repo.describeRepo?repo=did:plc:example123abc"
 ```
 
 **Orphaned account response:**
 ```json
-{"error":"RepoDeactivated","message":"Repo has been deactivated: did:plc:osjy3pwv4rnjiz7orw44gt3t"}
+{"error":"RepoDeactivated","message":"Repo has been deactivated: did:plc:example123abc"}
 ```
 
 **No account response:**
 ```json
-{"error":"RepoNotFound","message":"Could not find repo: did:plc:osjy3pwv4rnjiz7orw44gt3t"}
+{"error":"RepoNotFound","message":"Could not find repo: did:plc:example123abc"}
 ```
 
 ## Cleanup Options
@@ -47,7 +47,7 @@ This script SSH's into the PDS server and removes the orphaned account from the 
 ```bash
 cd scripts
 chmod +x cleanup_orphaned_account_db.sh
-./cleanup_orphaned_account_db.sh did:plc:osjy3pwv4rnjiz7orw44gt3t
+./cleanup_orphaned_account_db.sh did:plc:example123abc
 ```
 
 The script will:
@@ -70,8 +70,8 @@ This script uses the PDS admin API to delete the account.
 cd scripts
 chmod +x cleanup_orphaned_account.sh
 ./cleanup_orphaned_account.sh \
-  https://pds.local.theeverythingapp.de \
-  did:plc:osjy3pwv4rnjiz7orw44gt3t \
+  https://pds.example.com \
+  did:plc:example123abc \
   YOUR_ADMIN_PASSWORD
 ```
 
@@ -146,7 +146,7 @@ All are linked by DID and must be deleted in the correct order to respect foreig
 
 ### SSH Connection Refused
 ```
-ssh: connect to host pds.local.theeverythingapp.de port 22: Connection refused
+ssh: connect to host pds.example.com port 22: Connection refused
 ```
 
 **Solution:** Update the script with the correct SSH hostname or use the admin API method instead.

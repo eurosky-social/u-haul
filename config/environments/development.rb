@@ -75,7 +75,7 @@ Rails.application.configure do
   config.action_controller.raise_on_missing_callback_actions = true
 
   # Allow requests from migration hostnames
-  config.hosts << "migration.local.theeverythingapp.de"
-  config.hosts << /migration\..+\.theeverythingapp\.de/
+  config.hosts << "migration.local.example.com"
+  config.hosts << /migration\..+\.example\.com/
   config.hosts << "localhost"
 end
