@@ -28,8 +28,10 @@
 
 - **Web-Based Interface**: Simple form-based migration process, no command-line required
 - **Complete Migration**: Transfers repository data, blobs (images/videos), and preferences
+- **Backup Bundle** (Optional): Download a complete ZIP archive of your account before migration
+- **Rotation Keys**: Receive account recovery keys for reverting PLC changes if needed
 - **Progress Tracking**: Real-time status updates with percentage completion
-- **Secure**: Encrypted credential storage with automatic expiration
+- **Secure**: Encrypted credential storage with automatic expiration and cleanup
 - **Memory-Optimized**: Sequential blob processing prevents memory exhaustion
 - **Token-Based Access**: No authentication required, shareable migration status URLs
 - **Background Processing**: Sidekiq-powered async jobs for reliability
@@ -173,8 +175,18 @@ SECONDARY_COLOR=#764ba2
    - New PDS host (e.g., `https://pds.example.com`)
    - New handle (e.g., `alice.pds.example.com`)
    - Invite code (if required by target PDS)
+   - **Create backup bundle** (optional, recommended): Downloads a complete ZIP backup of your account
 
 3. **Submit the form** - You'll receive a unique migration token (e.g., `EURO-ABC12345`)
+
+**Backup Bundle Option:**
+If you enabled backup creation, the migration will:
+- Download all your data (posts, media, profile) to a ZIP file
+- Send you an email when the backup is ready (available for 24 hours)
+- Allow you to download the backup before migration proceeds
+- Automatically continue migration after backup is created
+
+This provides a safety net - you'll have a complete local copy of your account.
 
 ### Monitoring Progress
 
@@ -191,8 +203,12 @@ When the migration reaches **"Waiting for PLC Token"**:
 
 1. Check your email for the PLC token
 2. Enter the token on the status page
-3. ⚠️ **This is the point of no return** - your DID will be updated to point to the new PDS
-4. The migration will automatically complete by activating the new account
+3. **Save your rotation key** - displayed on the status page (copy and store securely)
+4. ⚠️ **This is the point of no return** - your DID will be updated to point to the new PDS
+5. The migration will automatically complete by activating the new account
+
+**About Rotation Keys:**
+The rotation key is an account recovery mechanism. It allows you to revert your DID back to the old PDS if something goes wrong. Store it securely - you won't be able to retrieve it later. See [Backup and Rotation Keys Documentation](docs/BACKUP_AND_ROTATION_KEYS.md) for details.
 
 ### Migration URLs
 
@@ -367,6 +383,12 @@ docker compose logs postgres
 - **Check logs**: `docker compose logs -f web sidekiq`
 - **Rails console**: `docker compose exec web rails console` to inspect migration state
 - **GitHub Issues**: Report bugs or request features
+
+## Additional Documentation
+
+- **[Backup and Rotation Keys](docs/BACKUP_AND_ROTATION_KEYS.md)** - Detailed guide on backup bundles and account recovery keys
+- **[DOCKER.md](DOCKER.md)** - Docker deployment guide
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Development and contribution guidelines
 
 ## Development
 
