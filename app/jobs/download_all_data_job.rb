@@ -123,8 +123,14 @@ class DownloadAllDataJob < ApplicationJob
     # Export repo from old PDS (returns the path to the created CAR file)
     car_path = goat.export_repo
 
-    # Return the path as a Pathname for consistency
-    Pathname.new(car_path)
+    # Copy the CAR file to the migration's storage directory
+    destination_path = storage_dir.join('repo.car')
+    FileUtils.cp(car_path, destination_path)
+
+    logger.info("Copied repository from #{car_path} to #{destination_path}")
+
+    # Return the destination path as a Pathname
+    destination_path
   end
 
   # Collect all blobs using cursor-based pagination
