@@ -361,4 +361,24 @@ class Migration < ApplicationRecord
     percentage = (uploaded_size.to_f / total_size * range).round
     base + percentage
   end
+
+  def retry_from_current_step!
+    return false unless failed? || error?
+    
+    job_class = case current_step
+    when 'creating_account', nil then CreateAccountJob
+    when 'importing_repo' then ImportRepoJob
+    when 'importing_blobs' then ImportBlobsJob
+    when 'importing_prefs' then ImportPrefsJob
+    when 'waiting_for_token' then WaitForPlcTokenJob
+    when 'updating_plc' then UpdatePlcJob
+    when 'activating_account' then ActivateAccountJob
+    else
+      return false
+    end
+    
+    update(status: 'pending', error_message: nil)
+    job_class.perform_async(id)
+    true
+  end
 end

@@ -131,6 +131,4 @@ docker-compose.override.yml
 /tmp/goat/
 
 # Personal development tracking files
-docs/STATUS.md
-docs/IMPLEMENTATION_SUMMARY.md
-docs/TEST_FIXES.md
+docs/internal/
