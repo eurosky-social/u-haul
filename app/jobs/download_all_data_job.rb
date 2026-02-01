@@ -87,9 +87,16 @@ class DownloadAllDataJob < ApplicationJob
     }
     migration.save!
 
-    # Step 5: Download all blobs using HTTParty with thread pool
-    # Note: Not using goat blob export due to SSL certificate verification issues with some PDS servers
+    # Step 5: Download all blobs using HTTParty with thread pool (10 parallel downloads)
+    start_time = Time.current
+    logger.info("Starting blob download at #{start_time.iso8601} (#{all_blobs.length} blobs)")
+
     download_all_blobs(migration, goat, all_blobs, storage_dir)
+
+    duration = Time.current - start_time
+    total_bytes = migration.progress_data.dig('download_progress', 'bytes') || 0
+    logger.info("Blob download completed in #{duration.round(2)} seconds (#{format_bytes(total_bytes)} total)")
+    logger.info("Average speed: #{(total_bytes / duration / 1024 / 1024).round(2)} MB/s") if duration > 0
 
     logger.info("Download completed for migration #{migration.token}")
 
@@ -322,13 +329,13 @@ class DownloadAllDataJob < ApplicationJob
   end
 
   # Download blobs using goat's native blob export command (much faster than HTTP)
-  def download_blobs_with_goat(goat, storage_dir, expected_count)
-    blobs_dir = storage_dir.join('blobs')
+  def download_blobs_with_goat(goat, blobs_dir, expected_count)
+    logger.info("Using goat blob export for native Go SDK downloads (expected: #{expected_count} blobs)")
 
-    logger.info("Using goat blob export for faster downloads...")
+    # Ensure the blobs directory exists
+    FileUtils.mkdir_p(blobs_dir)
 
-    # Use goat's blob export command which uses the native Go SDK
-    # This is significantly faster than downloading via HTTP with HTTParty
+    # Build the command
     cmd = [
       'goat', 'blob', 'export',
       '--output', blobs_dir.to_s,
@@ -336,31 +343,50 @@ class DownloadAllDataJob < ApplicationJob
       goat.migration.did
     ]
 
-    logger.info("Executing goat blob export: #{cmd.join(' ')}")
+    logger.info("Executing: #{cmd.join(' ')}")
 
-    # Run the command and capture output
-    output, status = Open3.capture2e(
+    # Run the command and capture output in real-time
+    output = []
+    exit_status = nil
+
+    Open3.popen2e(
       { 'ATP_PLC_HOST' => ENV.fetch('ATP_PLC_HOST', 'https://plc.directory') },
       *cmd
-    )
+    ) do |stdin, stdout_stderr, wait_thr|
+      stdin.close
 
-    unless status.success?
-      logger.error("Goat blob export failed: #{output}")
-      raise "Blob export failed: #{output}"
+      # Read output line by line and log it
+      stdout_stderr.each_line do |line|
+        output << line
+        # Log progress lines from goat
+        logger.info("[goat] #{line.chomp}") if line.match?(/downloaded|exporting|blobs/i)
+      end
+
+      exit_status = wait_thr.value
     end
 
-    logger.info("Goat blob export completed")
-    logger.debug(output)
+    unless exit_status.success?
+      logger.error("Goat blob export failed with exit code #{exit_status.exitstatus}")
+      logger.error("Output: #{output.join}")
+      raise "Blob export failed: #{output.join}"
+    end
 
-    # Count downloaded blobs
-    downloaded_count = Dir.glob(blobs_dir.join('*')).count
-    total_bytes = Dir.glob(blobs_dir.join('*')).sum { |f| File.size(f) }
+    logger.info("Goat blob export completed successfully")
+
+    # Count downloaded blobs and calculate total size
+    blob_files = Dir.glob(File.join(blobs_dir, '*')).select { |f| File.file?(f) }
+    downloaded_count = blob_files.count
+    total_bytes = blob_files.sum { |f| File.size(f) }
 
     logger.info("Downloaded #{downloaded_count}/#{expected_count} blobs (#{format_bytes(total_bytes)})")
 
-    # Report any missing blobs
+    # Check for missing blobs
     if downloaded_count < expected_count
-      logger.warn("Missing #{expected_count - downloaded_count} blobs")
+      missing_count = expected_count - downloaded_count
+      logger.warn("Missing #{missing_count} blobs (#{((missing_count.to_f / expected_count) * 100).round(1)}%)")
+
+      # Note: We don't fail here because some blobs might be legitimately missing
+      # from the old PDS (deleted or unavailable). The migration can continue.
     end
 
     [downloaded_count, total_bytes]
