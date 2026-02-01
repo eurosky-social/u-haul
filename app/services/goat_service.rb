@@ -294,13 +294,20 @@ class GoatService
       identifier: migration.old_handle
     )
 
-    # Execute curl to download CAR file
+    # Execute curl to download CAR file with progress and strict timeout
+    # --max-time: hard timeout (300s = 5 min)
+    # --connect-timeout: connection establishment timeout (30s)
+    # --speed-limit/--speed-time: abort if speed drops below 1KB/s for 60s
     _stdout, _stderr, _status = execute_command(
       'curl', '-s', '-f',
+      '--max-time', '600',           # Hard timeout: 10 minutes max
+      '--connect-timeout', '30',      # Connection timeout: 30 seconds
+      '--speed-limit', '1024',        # Minimum speed: 1 KB/s
+      '--speed-time', '60',           # Abort if below speed-limit for 60s
       '-H', "Authorization: Bearer #{access_token}",
       url,
       '-o', car_path.to_s,
-      timeout: DEFAULT_TIMEOUT
+      timeout: 660  # Give curl slightly more time than --max-time
     )
 
     unless File.exist?(car_path) && File.size(car_path) > 0
@@ -723,15 +730,13 @@ class GoatService
     stderr = ''
     status = nil
 
-    # Change to work directory for execution
-    Dir.chdir(work_dir) do
-      begin
-        Timeout.timeout(timeout) do
-          stdout, stderr, status = Open3.capture3(env, *cmd)
-        end
-      rescue Timeout::Error
-        raise TimeoutError, "Command timed out after #{timeout} seconds: #{cmd.join(' ')}"
+    # Execute command with explicit working directory (thread-safe alternative to chdir)
+    begin
+      Timeout.timeout(timeout) do
+        stdout, stderr, status = Open3.capture3(env, *cmd, chdir: work_dir)
       end
+    rescue Timeout::Error
+      raise TimeoutError, "Command timed out after #{timeout} seconds: #{cmd.join(' ')}"
     end
 
     [stdout, stderr, status]

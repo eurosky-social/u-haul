@@ -46,6 +46,12 @@ class UploadBlobsJob < ApplicationJob
     migration = Migration.find(migration_id)
     logger.info("Starting blob upload for migration #{migration.token} (DID: #{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_blobs'
+      logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping blob upload")
+      return
+    end
+
     # Step 1: Verify local blobs directory exists
     unless migration.downloaded_data_path.present?
       raise "Downloaded data path not set"
@@ -88,22 +94,34 @@ class UploadBlobsJob < ApplicationJob
 
   private
 
-  # Upload all blobs in parallel batches
+  # Upload all blobs using thread pool pattern for maximum throughput
   def upload_all_blobs(migration, goat, blob_files)
     total_blobs = blob_files.length
     uploaded_count = 0
     failed_cids = []
     total_bytes = 0
 
-    # Thread-safe counters
+    # Thread-safe counters and queue
     mutex = Mutex.new
+    queue = Queue.new
+    gc_counter = 0
 
-    # Process blobs in parallel batches
-    blob_files.each_slice(PARALLEL_UPLOADS).with_index do |batch, batch_index|
-      threads = batch.map.with_index do |blob_file, batch_offset|
-        Thread.new do
+    # Add all blob files to the queue
+    blob_files.each_with_index { |blob_file, index| queue << [blob_file, index] }
+
+    # Create worker threads (thread pool)
+    threads = PARALLEL_UPLOADS.times.map do
+      Thread.new do
+        loop do
+          # Get next blob from queue (non-blocking)
           begin
-            index = batch_index * PARALLEL_UPLOADS + batch_offset
+            blob_file, index = queue.pop(true)
+          rescue ThreadError
+            # Queue is empty, thread can exit
+            break
+          end
+
+          begin
             cid = File.basename(blob_file)
 
             # Get file size
@@ -116,9 +134,28 @@ class UploadBlobsJob < ApplicationJob
             mutex.synchronize do
               uploaded_count += 1
               total_bytes += blob_size
+              gc_counter += 1
             end
 
             logger.info("Uploaded blob #{index + 1}/#{total_blobs}: #{cid} (#{format_bytes(blob_size)})")
+
+            # Update progress periodically
+            if (index + 1) % 10 == 0
+              mutex.synchronize do
+                update_upload_progress(migration, uploaded_count, total_blobs, total_bytes)
+              end
+            end
+
+            # Run GC periodically
+            if gc_counter >= 50
+              mutex.synchronize do
+                if gc_counter >= 50
+                  logger.debug("Running garbage collection after #{gc_counter} blobs")
+                  GC.start
+                  gc_counter = 0
+                end
+              end
+            end
 
           rescue StandardError => e
             logger.error("Failed to upload blob #{cid}: #{e.message}")
@@ -128,17 +165,13 @@ class UploadBlobsJob < ApplicationJob
           end
         end
       end
-
-      # Wait for all threads in this batch to complete
-      threads.each(&:join)
-
-      # Update progress after each batch
-      update_upload_progress(migration, uploaded_count, total_blobs, total_bytes)
-
-      # Run garbage collection after each batch
-      logger.debug("Running garbage collection after batch #{batch_index + 1}")
-      GC.start
     end
+
+    # Wait for all worker threads to complete
+    threads.each(&:join)
+
+    # Final progress update
+    update_upload_progress(migration, uploaded_count, total_blobs, total_bytes)
 
     # Log summary
     logger.info("Upload complete: #{uploaded_count}/#{total_blobs} successful")
@@ -146,9 +179,36 @@ class UploadBlobsJob < ApplicationJob
 
     if failed_cids.any?
       logger.warn("Failed to upload #{failed_cids.length} blobs: #{failed_cids.join(', ')}")
+
+      # Save failed uploads to migration metadata
       migration.progress_data ||= {}
       migration.progress_data['failed_uploads'] = failed_cids
       migration.save!
+
+      # Write failed uploads manifest for visibility
+      if migration.downloaded_data_path.present?
+        manifest_path = File.join(migration.downloaded_data_path, 'FAILED_BLOB_UPLOADS.txt')
+        File.write(manifest_path, <<~MANIFEST)
+          FAILED BLOB UPLOADS REPORT
+          ==========================
+
+          Migration: #{migration.token}
+          DID: #{migration.did}
+          Date: #{Time.current.iso8601}
+
+          Total blobs: #{total_blobs}
+          Successfully uploaded: #{uploaded_count}
+          Failed to upload: #{failed_cids.length}
+
+          FAILED BLOB CIDs:
+          #{failed_cids.map { |cid| "  - #{cid}" }.join("\n")}
+
+          These blobs were available locally but failed to upload to the new PDS
+          due to network errors or timeouts. You may need to re-upload these manually.
+        MANIFEST
+
+        logger.info("Wrote failed uploads manifest to #{manifest_path}")
+      end
     end
 
     # Final GC

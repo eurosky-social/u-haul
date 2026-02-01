@@ -29,6 +29,12 @@ class WaitForPlcTokenJob < ApplicationJob
     Rails.logger.info("User must submit PLC token via web form at /migrations/#{migration.token}")
     Rails.logger.info("Once token is submitted, UpdatePlcJob will be enqueued automatically")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_plc'
+      Rails.logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping PLC token wait")
+      return
+    end
+
     # Request PLC token from old PDS (sends email to user)
     begin
       # service = GoatService.new(migration)

@@ -44,6 +44,14 @@ class UpdatePlcJob < ApplicationJob
     Rails.logger.info("CRITICAL: Starting PLC update for migration #{migration.token} (#{migration.did})")
     Rails.logger.info("This is the point of no return - the DID will be pointed to the new PDS")
 
+    # Idempotency check: Skip if already past this stage
+    # NOTE: We check for pending_plc OR pending_activation because this job is triggered
+    # manually by the user submitting the PLC token, and the status might still be pending_plc
+    unless ['pending_plc', 'pending_activation'].include?(migration.status)
+      Rails.logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping PLC update")
+      return
+    end
+
     # Step 1: Validate PLC token is present and not expired
     plc_token = migration.plc_token
     if plc_token.nil?

@@ -36,6 +36,12 @@ class CreateAccountJob < ApplicationJob
 
     Rails.logger.info("[CreateAccountJob] Starting for migration #{migration.token} (DID: #{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    unless ['pending_account', 'backup_ready'].include?(migration.status)
+      Rails.logger.info("[CreateAccountJob] Migration #{migration.token} is already at status '#{migration.status}', skipping account creation")
+      return
+    end
+
     # Update timestamp
     migration.progress_data ||= {}
     migration.progress_data['account_creation_started_at'] = Time.current.iso8601

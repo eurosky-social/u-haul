@@ -28,12 +28,22 @@ class UploadRepoJob < ApplicationJob
   queue_as :migrations
 
   # Retry configuration
-  retry_on StandardError, wait: :exponentially_longer, attempts: 3
+  # Use polynomially_longer for proper exponential backoff (2s, 8s, 18s, 32s, 50s)
+  retry_on StandardError, wait: :polynomially_longer, attempts: 5
   retry_on GoatService::RateLimitError, wait: :polynomially_longer, attempts: 5
+
+  # Special handling for timeout errors - retry more aggressively
+  retry_on GoatService::NetworkError, wait: :polynomially_longer, attempts: 7
 
   def perform(migration_id)
     migration = Migration.find(migration_id)
     logger.info("Starting repo upload for migration #{migration.token} (DID: #{migration.did})")
+
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_repo'
+      logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping repo upload")
+      return
+    end
 
     # Step 1: Verify local file exists
     unless migration.downloaded_data_path.present?
@@ -66,12 +76,34 @@ class UploadRepoJob < ApplicationJob
     logger.error("Repo upload failed for migration #{migration&.id || migration_id}: #{e.message}")
     logger.error(e.backtrace.join("\n"))
 
+    # Update retry count and last error
     if migration
       migration.reload
-      migration.mark_failed!("Repo upload failed: #{e.message}")
+      current_retry = executions - 1 # executions is 1-based, we need 0-based
+
+      # Update last error for visibility
+      migration.update(last_error: "Upload attempt #{current_retry + 1}: #{e.message}")
+
+      # Check if we've exhausted all retries
+      max_attempts = if e.is_a?(GoatService::NetworkError)
+        7
+      elsif e.is_a?(GoatService::RateLimitError)
+        5
+      else
+        5
+      end
+
+      if current_retry >= max_attempts - 1
+        # All retries exhausted, mark as failed
+        logger.error("[UploadRepoJob] All retries exhausted for migration #{migration.token}, marking as failed")
+        migration.mark_failed!("Repo upload failed after #{max_attempts} attempts: #{e.message}")
+      else
+        # Will retry, just log
+        logger.warn("[UploadRepoJob] Will retry (attempt #{current_retry + 1}/#{max_attempts}) for migration #{migration.token}")
+      end
     end
 
-    raise
+    raise # Re-raise to trigger ActiveJob retry
   end
 
   private

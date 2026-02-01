@@ -72,6 +72,12 @@ class ImportBlobsJob < ApplicationJob
     migration = Migration.find(migration_id)
     logger.info("Starting blob import for migration #{migration.token} (DID: #{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_blobs'
+      logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping blob import")
+      return
+    end
+
     # Step 1: Check concurrency limit
     if at_concurrency_limit?
       logger.info("Concurrency limit reached (#{MAX_CONCURRENT_BLOB_MIGRATIONS}), re-enqueuing in #{REQUEUE_DELAY}s")
@@ -179,7 +185,8 @@ class ImportBlobsJob < ApplicationJob
     logger.info("Estimated memory: #{estimated_mb} MB for #{blobs.length} blobs")
   end
 
-  # Process all blobs in parallel batches with memory optimization
+  # Process all blobs using thread pool pattern for maximum throughput
+  # Threads pick up new work as soon as they finish, no waiting for batches
   def process_blobs_sequentially(migration, goat, blobs)
     # Login to new PDS for uploads
     goat.login_new_pds
@@ -188,16 +195,27 @@ class ImportBlobsJob < ApplicationJob
     successful_count = 0
     failed_cids = []
 
-    # Thread-safe counters
+    # Thread-safe counters and queue
     mutex = Mutex.new
+    queue = Queue.new
+    gc_counter = 0
 
-    # Process blobs in batches for parallel transfer
-    blobs.each_slice(PARALLEL_BLOB_TRANSFERS).with_index do |batch, batch_index|
-      threads = batch.map.with_index do |cid, batch_offset|
-        Thread.new do
+    # Add all blobs to the queue
+    blobs.each_with_index { |cid, index| queue << [cid, index] }
+
+    # Create worker threads (thread pool)
+    threads = PARALLEL_BLOB_TRANSFERS.times.map do
+      Thread.new do
+        loop do
+          # Get next blob from queue (non-blocking)
           begin
-            index = batch_index * PARALLEL_BLOB_TRANSFERS + batch_offset
+            cid, index = queue.pop(true)
+          rescue ThreadError
+            # Queue is empty, thread can exit
+            break
+          end
 
+          begin
             # Download blob from old PDS
             blob_path = download_blob_with_retry(goat, cid)
 
@@ -211,6 +229,7 @@ class ImportBlobsJob < ApplicationJob
             mutex.synchronize do
               total_bytes_transferred += blob_size
               successful_count += 1
+              gc_counter += 1
             end
 
             # Log transfer
@@ -218,6 +237,24 @@ class ImportBlobsJob < ApplicationJob
 
             # Delete local file immediately
             FileUtils.rm_f(blob_path)
+
+            # Update progress periodically
+            if (index + 1) % PROGRESS_UPDATE_INTERVAL == 0
+              mutex.synchronize do
+                update_blob_progress(migration, successful_count, blobs.length, total_bytes_transferred)
+              end
+            end
+
+            # Run GC periodically
+            if gc_counter >= GC_INTERVAL
+              mutex.synchronize do
+                if gc_counter >= GC_INTERVAL
+                  logger.debug("Running garbage collection after #{GC_INTERVAL} blobs")
+                  GC.start
+                  gc_counter = 0
+                end
+              end
+            end
 
           rescue StandardError => e
             logger.error("Failed to transfer blob #{cid}: #{e.message}")
@@ -227,17 +264,10 @@ class ImportBlobsJob < ApplicationJob
           end
         end
       end
-
-      # Wait for all threads in this batch to complete
-      threads.each(&:join)
-
-      # Update progress after each batch
-      update_blob_progress(migration, successful_count, blobs.length, total_bytes_transferred)
-
-      # Run garbage collection after each batch
-      logger.debug("Running garbage collection after batch #{batch_index + 1}")
-      GC.start
     end
+
+    # Wait for all worker threads to complete
+    threads.each(&:join)
 
     # Final progress update
     update_blob_progress(migration, successful_count, blobs.length, total_bytes_transferred)
@@ -248,9 +278,36 @@ class ImportBlobsJob < ApplicationJob
 
     if failed_cids.any?
       logger.warn("Failed to transfer #{failed_cids.length} blobs: #{failed_cids.join(', ')}")
+
+      # Save failed blobs to migration metadata
       migration.progress_data ||= {}
       migration.progress_data['failed_blobs'] = failed_cids
       migration.save!
+
+      # Write failed blobs manifest for visibility
+      if migration.downloaded_data_path.present?
+        manifest_path = File.join(migration.downloaded_data_path, 'FAILED_BLOB_UPLOADS.txt')
+        File.write(manifest_path, <<~MANIFEST)
+          FAILED BLOB UPLOADS REPORT
+          ==========================
+
+          Migration: #{migration.token}
+          DID: #{migration.did}
+          Date: #{Time.current.iso8601}
+
+          Total blobs: #{blobs.length}
+          Successfully transferred: #{successful_count}
+          Failed to upload: #{failed_cids.length}
+
+          FAILED BLOB CIDs:
+          #{failed_cids.map { |cid| "  - #{cid}" }.join("\n")}
+
+          These blobs were downloaded from the old PDS but failed to upload to the new PDS
+          due to network errors or timeouts. You may need to re-upload these manually.
+        MANIFEST
+
+        logger.info("Wrote failed uploads manifest to #{manifest_path}")
+      end
     end
 
     # Final GC

@@ -30,6 +30,12 @@ class ImportPrefsJob < ApplicationJob
     migration = Migration.find(migration_id)
     Rails.logger.info("Starting preferences import for migration #{migration.token} (#{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_prefs'
+      Rails.logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping preferences import")
+      return
+    end
+
     # Initialize GoatService
     service = GoatService.new(migration)
 

@@ -55,6 +55,12 @@ class CreateBackupBundleJob < ApplicationJob
     migration = Migration.find(migration_id)
     logger.info("Creating backup bundle for migration #{migration.token} (DID: #{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_backup'
+      logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping backup bundle creation")
+      return
+    end
+
     # Step 1: Verify downloaded data exists
     unless migration.downloaded_data_path.present? && Dir.exist?(migration.downloaded_data_path)
       raise "Downloaded data not found at: #{migration.downloaded_data_path}"

@@ -34,6 +34,12 @@ class ImportRepoJob < ApplicationJob
 
     Rails.logger.info("[ImportRepoJob] Starting for migration #{migration.token} (DID: #{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_repo'
+      Rails.logger.info("[ImportRepoJob] Migration #{migration.token} is already at status '#{migration.status}', skipping repo import")
+      return
+    end
+
     # Update timestamp
     migration.progress_data ||= {}
     migration.progress_data['repo_import_started_at'] = Time.current.iso8601

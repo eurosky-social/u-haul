@@ -48,6 +48,12 @@ class ActivateAccountJob < ApplicationJob
     migration = Migration.find(migration_id)
     Rails.logger.info("Starting account activation for migration #{migration.token} (#{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_activation'
+      Rails.logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping account activation")
+      return
+    end
+
     # Initialize GoatService
     service = GoatService.new(migration)
 

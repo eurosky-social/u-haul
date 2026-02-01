@@ -1,3 +1,5 @@
+require 'open3'
+
 # DownloadAllDataJob - Downloads all account data for backup and migration
 #
 # This job downloads the user's complete account data from the old PDS:
@@ -54,6 +56,12 @@ class DownloadAllDataJob < ApplicationJob
     migration = Migration.find(migration_id)
     logger.info("Starting download for migration #{migration.token} (DID: #{migration.did})")
 
+    # Idempotency check: Skip if already past this stage
+    if migration.status != 'pending_download'
+      logger.info("Migration #{migration.token} is already at status '#{migration.status}', skipping download")
+      return
+    end
+
     # Step 1: Create local storage directory
     storage_dir = create_storage_directory(migration)
     migration.update!(downloaded_data_path: storage_dir.to_s)
@@ -79,7 +87,8 @@ class DownloadAllDataJob < ApplicationJob
     }
     migration.save!
 
-    # Step 5: Download all blobs in parallel
+    # Step 5: Download all blobs using HTTParty with thread pool
+    # Note: Not using goat blob export due to SSL certificate verification issues with some PDS servers
     download_all_blobs(migration, goat, all_blobs, storage_dir)
 
     logger.info("Download completed for migration #{migration.token}")
@@ -153,23 +162,35 @@ class DownloadAllDataJob < ApplicationJob
     all_blobs
   end
 
-  # Download all blobs in parallel batches
+  # Download all blobs using a thread pool pattern
+  # This ensures we always have PARALLEL_DOWNLOADS threads running,
+  # starting a new download as soon as one completes (no waiting for batches)
   def download_all_blobs(migration, goat, blobs, storage_dir)
     total_blobs = blobs.length
     downloaded_count = 0
     failed_cids = []
     total_bytes = 0
 
-    # Thread-safe counters
+    # Thread-safe counters and queue
     mutex = Mutex.new
+    queue = Queue.new
 
-    # Process blobs in parallel batches
-    blobs.each_slice(PARALLEL_DOWNLOADS).with_index do |batch, batch_index|
-      threads = batch.map.with_index do |cid, batch_offset|
-        Thread.new do
+    # Add all blob CIDs to the queue
+    blobs.each_with_index { |cid, index| queue << [cid, index] }
+
+    # Create worker threads (thread pool)
+    threads = PARALLEL_DOWNLOADS.times.map do
+      Thread.new do
+        loop do
+          # Get next blob from queue (blocks if empty, returns nil when queue is closed)
           begin
-            index = batch_index * PARALLEL_DOWNLOADS + batch_offset
+            cid, index = queue.pop(true)
+          rescue ThreadError
+            # Queue is empty, thread can exit
+            break
+          end
 
+          begin
             # Download blob to local storage
             blob_path = storage_dir.join('blobs', cid)
             download_blob_with_retry(goat, cid, blob_path.to_s)
@@ -185,6 +206,13 @@ class DownloadAllDataJob < ApplicationJob
 
             logger.info("Downloaded blob #{index + 1}/#{total_blobs}: #{cid} (#{format_bytes(blob_size)})")
 
+            # Update progress periodically
+            if (index + 1) % PROGRESS_UPDATE_INTERVAL == 0
+              mutex.synchronize do
+                update_download_progress(migration, downloaded_count, total_blobs, total_bytes)
+              end
+            end
+
           rescue StandardError => e
             logger.error("Failed to download blob #{cid}: #{e.message}")
             mutex.synchronize do
@@ -193,13 +221,13 @@ class DownloadAllDataJob < ApplicationJob
           end
         end
       end
-
-      # Wait for all threads in this batch to complete
-      threads.each(&:join)
-
-      # Update progress after each batch
-      update_download_progress(migration, downloaded_count, total_blobs, total_bytes)
     end
+
+    # Wait for all worker threads to complete
+    threads.each(&:join)
+
+    # Final progress update
+    update_download_progress(migration, downloaded_count, total_blobs, total_bytes)
 
     # Log summary
     logger.info("Download complete: #{downloaded_count}/#{total_blobs} successful")
@@ -207,9 +235,35 @@ class DownloadAllDataJob < ApplicationJob
 
     if failed_cids.any?
       logger.warn("Failed to download #{failed_cids.length} blobs: #{failed_cids.join(', ')}")
+
+      # Save failed blobs list to migration metadata
       migration.progress_data ||= {}
       migration.progress_data['failed_downloads'] = failed_cids
       migration.save!
+
+      # Write failed blobs manifest to downloadable data
+      manifest_path = storage_dir.join('MISSING_BLOBS.txt')
+      File.write(manifest_path, <<~MANIFEST)
+        MISSING BLOBS REPORT
+        ====================
+
+        Migration: #{migration.token}
+        DID: #{migration.did}
+        Date: #{Time.current.iso8601}
+
+        Total blobs: #{total_blobs}
+        Successfully downloaded: #{downloaded_count}
+        Failed to download: #{failed_cids.length}
+
+        MISSING BLOB CIDs:
+        #{failed_cids.map { |cid| "  - #{cid}" }.join("\n")}
+
+        These blobs could not be downloaded from the old PDS due to network errors,
+        timeouts, or missing files. The migration will continue without these blobs.
+        You may need to re-upload these media files manually after migration.
+      MANIFEST
+
+      logger.info("Wrote missing blobs manifest to #{manifest_path}")
     end
   end
 
@@ -265,6 +319,51 @@ class DownloadAllDataJob < ApplicationJob
     migration.save!
 
     logger.debug("Download progress: #{downloaded}/#{total} blobs (#{format_bytes(bytes_downloaded)})")
+  end
+
+  # Download blobs using goat's native blob export command (much faster than HTTP)
+  def download_blobs_with_goat(goat, storage_dir, expected_count)
+    blobs_dir = storage_dir.join('blobs')
+
+    logger.info("Using goat blob export for faster downloads...")
+
+    # Use goat's blob export command which uses the native Go SDK
+    # This is significantly faster than downloading via HTTP with HTTParty
+    cmd = [
+      'goat', 'blob', 'export',
+      '--output', blobs_dir.to_s,
+      '--pds-host', goat.migration.old_pds_host,
+      goat.migration.did
+    ]
+
+    logger.info("Executing goat blob export: #{cmd.join(' ')}")
+
+    # Run the command and capture output
+    output, status = Open3.capture2e(
+      { 'ATP_PLC_HOST' => ENV.fetch('ATP_PLC_HOST', 'https://plc.directory') },
+      *cmd
+    )
+
+    unless status.success?
+      logger.error("Goat blob export failed: #{output}")
+      raise "Blob export failed: #{output}"
+    end
+
+    logger.info("Goat blob export completed")
+    logger.debug(output)
+
+    # Count downloaded blobs
+    downloaded_count = Dir.glob(blobs_dir.join('*')).count
+    total_bytes = Dir.glob(blobs_dir.join('*')).sum { |f| File.size(f) }
+
+    logger.info("Downloaded #{downloaded_count}/#{expected_count} blobs (#{format_bytes(total_bytes)})")
+
+    # Report any missing blobs
+    if downloaded_count < expected_count
+      logger.warn("Missing #{expected_count - downloaded_count} blobs")
+    end
+
+    [downloaded_count, total_bytes]
   end
 
   # Format bytes for human-readable output

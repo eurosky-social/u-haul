@@ -59,6 +59,10 @@ class MigrationsController < ApplicationController
     @migration = Migration.new(migration_params)
 
     begin
+      # Sanitize handles by removing invisible Unicode characters and trimming whitespace
+      @migration.old_handle = sanitize_handle(@migration.old_handle) if @migration.old_handle.present?
+      @migration.new_handle = sanitize_handle(@migration.new_handle) if @migration.new_handle.present?
+
       # Resolve the old handle to get DID and PDS host
       if @migration.old_handle.present?
         resolution = GoatService.resolve_handle(@migration.old_handle)
@@ -275,5 +279,21 @@ class MigrationsController < ApplicationController
       uploaded: blobs.values.count { |b| b['uploaded'] == b['size'] },
       bytes_transferred: blobs.values.sum { |b| b['uploaded'].to_i }
     }
+  end
+
+  # Sanitize handle by removing invisible Unicode characters and trimming whitespace
+  # This prevents issues with copy-pasted handles that may contain RTL marks, zero-width spaces, etc.
+  def sanitize_handle(handle)
+    return nil if handle.nil?
+
+    # Remove common invisible Unicode characters:
+    # - U+200B: Zero-width space
+    # - U+200C: Zero-width non-joiner
+    # - U+200D: Zero-width joiner
+    # - U+200E: Left-to-right mark
+    # - U+200F: Right-to-left mark
+    # - U+202A-U+202E: Various directional formatting characters
+    # - U+FEFF: Zero-width no-break space (BOM)
+    handle.gsub(/[\u200B-\u200F\u202A-\u202E\uFEFF]/, '').strip
   end
 end
