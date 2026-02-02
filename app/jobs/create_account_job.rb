@@ -53,22 +53,49 @@ class CreateAccountJob < ApplicationJob
     # Create GoatService instance
     goat = GoatService.new(migration)
 
-    # Step 1: Login to old PDS
-    Rails.logger.info("[CreateAccountJob] Logging in to old PDS: #{migration.old_pds_host}")
-    goat.login_old_pds
+    # Check migration type
+    if migration.returning_to_existing_pds?
+      # Migration IN: Returning to existing bsky.social account - just verify login
+      Rails.logger.info("[CreateAccountJob] Migration type: migration_in (returning to existing PDS)")
+      Rails.logger.info("[CreateAccountJob] Verifying access to existing account on new PDS: #{migration.new_pds_host}")
 
-    # Step 2: Get service auth token for new PDS
-    Rails.logger.info("[CreateAccountJob] Getting service auth token for new PDS")
-    new_pds_did = goat.send(:get_new_pds_service_did)
-    service_auth_token = goat.get_service_auth_token(new_pds_did)
+      # Step 1: Login to old PDS first (we'll need this for data export)
+      Rails.logger.info("[CreateAccountJob] Logging in to old PDS: #{migration.old_pds_host}")
+      goat.login_old_pds
 
-    # Step 3: Create account on new PDS with existing DID
-    Rails.logger.info("[CreateAccountJob] Creating deactivated account on new PDS: #{migration.new_pds_host}")
-    goat.create_account_on_new_pds(service_auth_token)
+      # Step 2: Verify we can access the existing account on new PDS
+      Rails.logger.info("[CreateAccountJob] Verifying access to existing account on new PDS")
+      account_status = goat.verify_existing_account_access
+
+      if account_status[:deactivated]
+        Rails.logger.info("[CreateAccountJob] Existing account is deactivated, will be reactivated during migration")
+      else
+        Rails.logger.info("[CreateAccountJob] Existing account is active, will import data and update")
+      end
+
+      Rails.logger.info("[CreateAccountJob] Successfully verified access to existing account on #{migration.new_pds_host}")
+    else
+      # Migration OUT: Creating new account on different PDS
+      Rails.logger.info("[CreateAccountJob] Migration type: migration_out (creating new account on PDS)")
+
+      # Step 1: Login to old PDS
+      Rails.logger.info("[CreateAccountJob] Logging in to old PDS: #{migration.old_pds_host}")
+      goat.login_old_pds
+
+      # Step 2: Get service auth token for new PDS
+      Rails.logger.info("[CreateAccountJob] Getting service auth token for new PDS")
+      new_pds_did = goat.send(:get_new_pds_service_did)
+      service_auth_token = goat.get_service_auth_token(new_pds_did)
+
+      # Step 3: Create account on new PDS with existing DID
+      Rails.logger.info("[CreateAccountJob] Creating deactivated account on new PDS: #{migration.new_pds_host}")
+      goat.create_account_on_new_pds(service_auth_token)
+    end
 
     # Step 4: Update progress data
     migration.progress_data['account_created_at'] = Time.current.iso8601
-    migration.progress_data['new_pds_did'] = new_pds_did
+    migration.progress_data['migration_type'] = migration.migration_type
+    migration.progress_data['new_pds_did'] = new_pds_did if defined?(new_pds_did)
     migration.save!
 
     # Step 5: Advance to next stage

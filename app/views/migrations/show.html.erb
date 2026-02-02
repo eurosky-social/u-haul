@@ -341,11 +341,16 @@
         <div class="success-message" role="alert">
           <h3>Migration Completed Successfully!</h3>
           <p>
-            Your account has been successfully migrated to <strong><%= @migration.new_pds_host %></strong>.
-            You can now log in with your new handle: <strong><%= @migration.new_handle %></strong>
+            <% if @migration.returning_to_existing_pds? %>
+              Your account has been successfully migrated back to <strong><%= @migration.new_pds_host %></strong>.
+              You can now log in with your handle: <strong><%= @migration.new_handle %></strong>
+            <% else %>
+              Your account has been successfully migrated to <strong><%= @migration.new_pds_host %></strong>.
+              You can now log in with your new handle: <strong><%= @migration.new_handle %></strong>
+            <% end %>
           </p>
           <p style="margin-top: 12px;">
-            Your old account credentials have been securely deleted. Welcome to your new home!
+            Your old account credentials have been securely deleted. Welcome <%= @migration.returning_to_existing_pds? ? 'back' : 'to your new home' %>!
           </p>
         </div>
       <% end %>

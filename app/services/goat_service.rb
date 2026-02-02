@@ -157,6 +157,27 @@ class GoatService
     return { exists: false }
   end
 
+  def verify_existing_account_access
+    logger.info("Verifying access to existing account on new PDS for migration_in")
+
+    # Check if account exists
+    account_status = check_account_exists_on_new_pds
+
+    unless account_status[:exists]
+      raise GoatError, "Account does not exist on target PDS. For migration_in (returning to existing PDS), " \
+        "the account must already exist. DID: #{migration.did}, PDS: #{migration.new_pds_host}"
+    end
+
+    # Try to login - this will fail if password is wrong or account is inaccessible
+    login_new_pds
+
+    logger.info("Successfully verified access to existing account (deactivated: #{account_status[:deactivated]})")
+
+    account_status
+  rescue StandardError => e
+    raise AuthenticationError, "Failed to verify access to existing account: #{e.message}"
+  end
+
   def create_account_on_new_pds(service_auth_token)
     logger.info("Creating account on new PDS with existing DID")
 

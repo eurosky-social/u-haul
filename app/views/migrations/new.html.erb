@@ -193,6 +193,8 @@
           <li>You will need a PLC operation token from <a href="https://plc.directory" target="_blank" rel="noopener">plc.directory</a></li>
           <li>Make sure your new PDS is ready to accept your account</li>
         </ul>
+        <h4>Returning to Bluesky?</h4>
+        <p>If you're migrating back to <strong>bsky.social</strong> from another PDS, this tool will automatically detect that and log you into your existing Bluesky account instead of creating a new one. Just enter <code>bsky.social</code> as your new PDS host.</p>
       </div>
 
       <%= form_with model: @migration, url: migrations_path, local: true, html: { novalidate: true } do |f| %>

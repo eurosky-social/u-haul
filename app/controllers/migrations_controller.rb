@@ -72,6 +72,20 @@ class MigrationsController < ApplicationController
         Rails.logger.info("Resolved handle #{@migration.old_handle}: DID=#{@migration.did}, PDS=#{@migration.old_pds_host}")
       end
 
+      # Auto-detect migration type: if new_pds_host is bsky.social and old_pds_host is not, this is migration_in
+      if @migration.new_pds_host.present? && @migration.old_pds_host.present?
+        new_host_normalized = @migration.new_pds_host.downcase.gsub(%r{https?://}, '')
+        old_host_normalized = @migration.old_pds_host.downcase.gsub(%r{https?://}, '')
+
+        if new_host_normalized.include?('bsky.social') && !old_host_normalized.include?('bsky.social')
+          @migration.migration_type = 'migration_in'
+          Rails.logger.info("Auto-detected migration_in (returning to Bluesky)")
+        else
+          @migration.migration_type = 'migration_out'
+          Rails.logger.info("Auto-detected migration_out (migrating to new PDS)")
+        end
+      end
+
       # Set the password and expiration (Lockbox encrypts automatically)
       if params[:migration][:password].present?
         @migration.password = params[:migration][:password]

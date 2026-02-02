@@ -33,6 +33,11 @@ class Migration < ApplicationRecord
     failed: 'failed'
   }, validate: true
 
+  enum :migration_type, {
+    migration_out: 'migration_out',  # Migrating TO a new PDS (create new account)
+    migration_in: 'migration_in'     # Migrating back to existing PDS (login only)
+  }, validate: true
+
   # Encryption for sensitive fields using Lockbox
   # Provide the master key as a 64-character hex string, decoded to 32 bytes
   # Lockbox requires a 32-byte binary key
@@ -338,6 +343,16 @@ class Migration < ApplicationRecord
     update!(downloaded_data_path: nil)
   end
 
+  # Migration Type Helpers
+
+  def migrating_to_new_pds?
+    migration_out?
+  end
+
+  def returning_to_existing_pds?
+    migration_in?
+  end
+
   private
 
   # Token generation - EURO-XXXXXXXX format
@@ -409,7 +424,7 @@ class Migration < ApplicationRecord
 
   def retry_from_current_step!
     return false unless failed? || error?
-    
+
     job_class = case current_step
     when 'creating_account', nil then CreateAccountJob
     when 'importing_repo' then ImportRepoJob
@@ -421,7 +436,7 @@ class Migration < ApplicationRecord
     else
       return false
     end
-    
+
     update(status: 'pending', error_message: nil)
     job_class.perform_async(id)
     true
