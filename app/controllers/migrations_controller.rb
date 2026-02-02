@@ -80,6 +80,28 @@ class MigrationsController < ApplicationController
         if new_host_normalized.include?('bsky.social') && !old_host_normalized.include?('bsky.social')
           @migration.migration_type = 'migration_in'
           Rails.logger.info("Auto-detected migration_in (returning to Bluesky)")
+
+          # CRITICAL: Verify the account actually exists on bsky.social before starting migration
+          Rails.logger.info("Verifying pre-existing account on bsky.social for DID: #{@migration.did}")
+          begin
+            account_check = verify_account_exists_on_pds(@migration.new_pds_host, @migration.did)
+
+            unless account_check[:exists]
+              @migration.errors.add(:base, "Cannot migrate back to bsky.social: No account found with your DID (#{@migration.did}). " \
+                "Migration_in (returning to Bluesky) is only for users who previously had a bsky.social account. " \
+                "If you've never had a bsky.social account, you cannot migrate to it - bsky.social does not accept new accounts via migration.")
+              render :new, status: :unprocessable_entity
+              return
+            end
+
+            Rails.logger.info("Pre-existing account verified on bsky.social (deactivated: #{account_check[:deactivated]}, handle: #{account_check[:handle]})")
+          rescue StandardError => e
+            Rails.logger.error("Failed to verify pre-existing account on bsky.social: #{e.message}")
+            @migration.errors.add(:base, "Failed to verify account existence on bsky.social: #{e.message}. " \
+              "Please ensure you have a pre-existing bsky.social account before attempting to migrate back.")
+            render :new, status: :unprocessable_entity
+            return
+          end
         else
           @migration.migration_type = 'migration_out'
           Rails.logger.info("Auto-detected migration_out (migrating to new PDS)")
@@ -440,5 +462,39 @@ class MigrationsController < ApplicationController
     else
       raise "Cannot enqueue job for status: #{migration.status}"
     end
+  end
+
+  # Verify that an account exists on a PDS (for migration_in validation)
+  # Returns { exists: boolean, deactivated: boolean, handle: string }
+  def verify_account_exists_on_pds(pds_host, did)
+    url = "#{pds_host}/xrpc/com.atproto.repo.describeRepo?repo=#{did}"
+
+    response = HTTParty.get(url, timeout: 30)
+
+    if response.success?
+      parsed = JSON.parse(response.body)
+      return { exists: true, deactivated: false, handle: parsed['handle'] }
+    else
+      # Check error message for deactivated or not found
+      error_body = JSON.parse(response.body) rescue {}
+
+      # Bluesky returns "RepoDeactivated" for deactivated accounts
+      if error_body['error'] == 'RepoDeactivated'
+        return { exists: true, deactivated: true }
+      # Bluesky returns "InvalidRequest" with "Could not find user" for non-existent accounts
+      elsif error_body['error'] == 'InvalidRequest' && error_body['message']&.include?('Could not find user')
+        return { exists: false }
+      # Other 404 or 400 errors mean account doesn't exist
+      elsif [400, 404].include?(response.code)
+        return { exists: false }
+      else
+        # Unexpected error
+        Rails.logger.warn("Unexpected response when checking account: #{response.code} - #{error_body}")
+        return { exists: false }
+      end
+    end
+  rescue JSON::ParserError, HTTParty::Error, StandardError => e
+    Rails.logger.error("Failed to check account existence: #{e.message}")
+    raise "Unable to verify account existence: #{e.message}"
   end
 end

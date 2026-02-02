@@ -195,6 +195,7 @@
         </ul>
         <h4>Returning to Bluesky?</h4>
         <p>If you're migrating back to <strong>bsky.social</strong> from another PDS, this tool will automatically detect that and log you into your existing Bluesky account instead of creating a new one. Just enter <code>bsky.social</code> as your new PDS host.</p>
+        <p style="margin-top: 8px;"><strong>Important:</strong> You can ONLY migrate back to Bluesky if you previously had a <code>bsky.social</code> account. The tool will verify that your account exists on Bluesky before starting the migration. If you've never had a Bluesky account, you cannot migrate to it - Bluesky does not accept new accounts via migration.</p>
       </div>
 
       <%= form_with model: @migration, url: migrations_path, local: true, html: { novalidate: true } do |f| %>
