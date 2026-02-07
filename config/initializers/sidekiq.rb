@@ -52,6 +52,20 @@ Sidekiq.configure_server do |config|
     ['low', 1]
   ]
 
+  # Add middleware to handle deserialization errors gracefully
+  config.server_middleware do |chain|
+    chain.add(Class.new do
+      def call(worker, job, queue)
+        yield
+      rescue ActiveJob::DeserializationError => e
+        # If we can't deserialize the job arguments (e.g., a Migration was deleted),
+        # log it and discard the job rather than retrying indefinitely
+        Rails.logger.warn("[Sidekiq] Discarding job #{job['class']} due to deserialization error: #{e.message}")
+        # Don't re-raise - this marks the job as successfully completed (but discarded)
+      end
+    end)
+  end
+
   # Dead letter queue configuration
   config.death_handlers << ->(job, ex) do
     Rails.logger.error("Job failed: #{job['class']} - #{ex.message}")

@@ -923,7 +923,58 @@ class GoatService
   def self.resolve_handle_to_did(handle)
     Rails.logger.info("Resolving handle to DID: #{handle}")
 
-    # Try resolution via common PDS instances
+    # Strategy 1: Try DNS-based resolution (most reliable for custom domains)
+    begin
+      # Extract the domain from the handle for DNS TXT record lookup
+      domain = handle.strip.downcase
+      txt_record = "_atproto.#{domain}"
+
+      Rails.logger.debug("Attempting DNS TXT lookup for #{txt_record}")
+      require 'resolv'
+      resolver = Resolv::DNS.new
+
+      txt_records = resolver.getresources(txt_record, Resolv::DNS::Resource::IN::TXT)
+      txt_records.each do |record|
+        record.strings.each do |string|
+          if string.start_with?('did=')
+            did = string.sub('did=', '')
+            Rails.logger.info("Resolved handle #{handle} to DID via DNS: #{did}")
+            return did
+          end
+        end
+      end
+    rescue StandardError => e
+      Rails.logger.debug("DNS resolution failed for #{handle}: #{e.message}")
+      # Continue to next strategy
+    end
+
+    # Strategy 2: Try resolution via inferred PDS (for handles like user.pds.example.com)
+    if handle.include?('.pds.')
+      begin
+        # Extract potential PDS host from handle (e.g., euro11-06.pds.local.theeverythingapp.de -> pds.local.theeverythingapp.de)
+        parts = handle.split('.')
+        if parts.length >= 3
+          # Reconstruct PDS host from domain parts
+          pds_host = "https://#{parts[1..-1].join('.')}"
+          Rails.logger.debug("Attempting resolution via inferred PDS: #{pds_host}")
+
+          url = "#{pds_host}/xrpc/com.atproto.identity.resolveHandle"
+          response = HTTParty.get(url, query: { handle: handle }, timeout: 10)
+
+          if response.success?
+            parsed = JSON.parse(response.body)
+            did = parsed['did']
+            Rails.logger.info("Resolved handle #{handle} to DID via inferred PDS #{pds_host}: #{did}")
+            return did
+          end
+        end
+      rescue StandardError => e
+        Rails.logger.debug("Inferred PDS resolution failed: #{e.message}")
+        # Continue to next strategy
+      end
+    end
+
+    # Strategy 3: Try resolution via common PDS instances (for bsky.social handles)
     common_pds_hosts = ['https://bsky.social', 'https://bsky.network']
 
     common_pds_hosts.each do |pds_host|
@@ -934,7 +985,7 @@ class GoatService
         if response.success?
           parsed = JSON.parse(response.body)
           did = parsed['did']
-          Rails.logger.info("Resolved handle #{handle} to DID: #{did}")
+          Rails.logger.info("Resolved handle #{handle} to DID via #{pds_host}: #{did}")
           return did
         end
       rescue StandardError => e

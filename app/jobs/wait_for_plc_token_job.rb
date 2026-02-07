@@ -37,8 +37,8 @@ class WaitForPlcTokenJob < ApplicationJob
 
     # Request PLC token from old PDS (sends email to user)
     begin
-      # service = GoatService.new(migration)
-      # service.request_plc_token
+      service = GoatService.new(migration)
+      service.request_plc_token
 
       # Update progress to indicate token was requested
       migration.progress_data['plc_token_requested_at'] = Time.current.iso8601

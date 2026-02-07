@@ -147,7 +147,7 @@
       <div class="bookmark-notice" role="note">
         <h3>Bookmark This Page</h3>
         <p>Save this URL to track your migration progress:</p>
-        <code><%= migration_url(@migration) %></code>
+        <code><%= migration_by_token_url(@migration.token) %></code>
       </div>
 
       <div class="progress-section">
@@ -326,13 +326,13 @@
             <li>Enter the token below and submit</li>
           </ol>
 
-          <%= form_with model: @migration, url: submit_plc_token_migration_path(@migration), method: :patch, local: true do |f| %>
+          <%= form_with url: submit_plc_token_by_token_path(@migration.token), method: :post, local: true do |f| %>
             <div class="form-group">
-              <%= f.label :plc_token, "PLC Operation Token" %>
-              <%= f.text_field :plc_token, required: true, placeholder: "Enter token from email", autocomplete: "off" %>
+              <%= label_tag :plc_token, "PLC Operation Token" %>
+              <%= text_field_tag :plc_token, nil, required: true, placeholder: "Enter token from email", autocomplete: "off" %>
             </div>
 
-            <%= f.submit "Submit Token & Complete Migration", class: "submit-button", onclick: "return confirm('WARNING: This will permanently update your DID to point to the new PDS. This action CANNOT be undone. Are you absolutely sure you want to proceed?');" %>
+            <%= submit_tag "Submit Token & Complete Migration", class: "submit-button", onclick: "return confirm('WARNING: This will permanently update your DID to point to the new PDS. This action CANNOT be undone. Are you absolutely sure you want to proceed?');" %>
           <% end %>
         </div>
       <% end %>
