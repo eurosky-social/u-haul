@@ -1,66 +1,97 @@
+version: '3.9'
+
 services:
   # Autonomous PostgreSQL instance for migration tool
   eurosky-postgres:
     image: postgres:15-alpine
-    container_name: eurosky-postgres-${PARTITION}
-    hostname: eurosky-postgres-${PARTITION}
+    container_name: eurosky-postgres-${PARTITION:-production}
+    hostname: eurosky-postgres-${PARTITION:-production}
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: eurosky_migration_production
       POSTGRES_USER: postgres
+    # Expose on Tailscale interface ONLY for admin access
     ports:
-      - "5433:5432"  # Different from u-at-proto's 5432
+      - "${TAILSCALE_IP:-100.0.0.1}:5433:5432"  # Bind to Tailscale IP
     volumes:
       - eurosky_postgres_data:/var/lib/postgresql/data
-    labels:
-      - "traefik.enable=true"
-      # TCP router for PostgreSQL
-      - "traefik.tcp.routers.eurosky-postgres.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.eurosky-postgres.entrypoints=eurosky-postgres"
-      - "traefik.tcp.routers.eurosky-postgres.service=eurosky-postgres"
-      - "traefik.tcp.services.eurosky-postgres.loadbalancer.server.port=5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d eurosky_migration_production"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - eurosky-internal
+      - u-at-proto_default
 
   # Autonomous Redis instance for migration tool
   eurosky-redis:
     image: redis:7-bookworm
-    container_name: eurosky-redis-${PARTITION}
-    hostname: eurosky-redis-${PARTITION}
+    container_name: eurosky-redis-${PARTITION:-production}
+    hostname: eurosky-redis-${PARTITION:-production}
     volumes:
       - eurosky_redis_data:/data
     command: >
       sh -c "redis-server
       --appendonly yes
       --requirepass ${REDIS_PASSWORD}
-      --bind 0.0.0.0"
+      --bind 127.0.0.1"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 3s
       retries: 5
     restart: unless-stopped
+    networks:
+      - eurosky-internal
+    # NO PORT EXPOSURE - Internal network only
+
+  # Database migrations (runs once on startup)
+  eurosky-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eurosky-migrate-${PARTITION:-production}
+    command: bundle exec rails db:migrate
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres-${PARTITION:-production}:5432/eurosky_migration_production
+      REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis-${PARTITION:-production}:6379/0
+      RAILS_MASTER_KEY: ${MIGRATION_MASTER_KEY}
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY}
+      # Active Record Encryption (required by Rails 7.1)
+      ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: ${ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY}
+      ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY: ${ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY}
+      ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT: ${ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT}
+    depends_on:
+      eurosky-postgres:
+        condition: service_healthy
+      eurosky-redis:
+        condition: service_healthy
+    networks:
+      - eurosky-internal
+      - u-at-proto_default
 
   # Rails web application
   eurosky-web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: eurosky-web-${PARTITION}
-    hostname: eurosky-web-${PARTITION}
-    user: root
+    container_name: eurosky-web-${PARTITION:-production}
+    hostname: eurosky-web-${PARTITION:-production}
+    command: bundle exec rails server -b 0.0.0.0 -p 3000
+    # NO public port exposure - Caddy reverse proxy handles it
     environment:
       RAILS_ENV: production
-      FORCE_SSL: "false"
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres-${PARTITION}:5432/eurosky_migration_production
-      REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis-${PARTITION}:6379/0
-      RAILS_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
-      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
-      DOMAIN: migration.${PARTITION}.${DOMAIN}
+      FORCE_SSL: "false"  # Caddy handles SSL termination
+      RAILS_LOG_TO_STDOUT: "true"
+      RAILS_SERVE_STATIC_FILES: "true"
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres-${PARTITION:-production}:5432/eurosky_migration_production
+      REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis-${PARTITION:-production}:6379/0
+      RAILS_MASTER_KEY: ${MIGRATION_MASTER_KEY}
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY}
+      DOMAIN: ${DOMAIN}
       ATP_PLC_HOST: ${ATP_PLC_HOST:-https://plc.directory}
       # Active Record Encryption (required by Rails 7.1)
       ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: ${ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY}
@@ -69,46 +100,55 @@ services:
       # Allow access to PDS instances without SSRF protection
       PDS_DISABLE_SSRF_PROTECTION: "true"
       MAX_CONCURRENT_MIGRATIONS: ${MAX_CONCURRENT_MIGRATIONS:-5}
+      # Email configuration
+      MAILER_FROM_EMAIL: ${MAILER_FROM_EMAIL:-noreply@${DOMAIN}}
+      SMTP_ADDRESS: ${SMTP_ADDRESS}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_DOMAIN: ${SMTP_DOMAIN:-${DOMAIN}}
+      # Sidekiq admin (optional)
+      SIDEKIQ_USERNAME: ${SIDEKIQ_USERNAME:-admin}
+      SIDEKIQ_PASSWORD: ${SIDEKIQ_PASSWORD}
+      # Disable Rack::Attack rate limiting (Caddy handles it)
+      DISABLE_RACK_ATTACK: ${DISABLE_RACK_ATTACK:-true}
     volumes:
-      - eurosky_migration_data:/rails/tmp/goat
+      - eurosky_tmp_data:/rails/tmp  # Backups, downloads, etc.
     depends_on:
       eurosky-postgres:
         condition: service_healthy
       eurosky-redis:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.eurosky-migration.rule=Host(`migration.${PARTITION}.${DOMAIN}`)"
-      - "traefik.http.routers.eurosky-migration.entrypoints=websecure"
-      - "traefik.http.routers.eurosky-migration.tls.certresolver=letsencrypt"
-      - "traefik.http.services.eurosky-migration.loadbalancer.server.port=3000"
+      eurosky-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget --no-verbose --tries=1 --output-document=/dev/null http://localhost:3000/up || exit 1",
+          "curl -f http://localhost:3000/up || exit 1",
         ]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 40s
     restart: unless-stopped
+    networks:
+      - eurosky-internal
 
   # Sidekiq background job processor
   eurosky-sidekiq:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: eurosky-sidekiq-${PARTITION}
-    hostname: eurosky-sidekiq-${PARTITION}
-    user: root
+    container_name: eurosky-sidekiq-${PARTITION:-production}
+    hostname: eurosky-sidekiq-${PARTITION:-production}
     command: bundle exec sidekiq -C config/sidekiq.yml
     environment:
       RAILS_ENV: production
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres-${PARTITION}:5432/eurosky_migration_production
-      REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis-${PARTITION}:6379/0
-      RAILS_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
-      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-your-master-key-here}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres-${PARTITION:-production}:5432/eurosky_migration_production
+      REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis-${PARTITION:-production}:6379/0
+      RAILS_MASTER_KEY: ${MIGRATION_MASTER_KEY}
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY}
       ATP_PLC_HOST: ${ATP_PLC_HOST:-https://plc.directory}
       # Active Record Encryption (required by Rails 7.1)
       ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: ${ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY}
@@ -116,13 +156,22 @@ services:
       ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT: ${ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT}
       PDS_DISABLE_SSRF_PROTECTION: "true"
       MAX_CONCURRENT_MIGRATIONS: ${MAX_CONCURRENT_MIGRATIONS:-5}
+      # Email configuration
+      MAILER_FROM_EMAIL: ${MAILER_FROM_EMAIL:-noreply@${DOMAIN}}
+      SMTP_ADDRESS: ${SMTP_ADDRESS}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_DOMAIN: ${SMTP_DOMAIN:-${DOMAIN}}
     volumes:
-      - eurosky_migration_data:/rails/tmp/goat
+      - eurosky_tmp_data:/rails/tmp  # Backups, downloads, etc.
     depends_on:
       eurosky-postgres:
         condition: service_healthy
       eurosky-redis:
         condition: service_healthy
+      eurosky-migrate:
+        condition: service_completed_successfully
       eurosky-web:
         condition: service_healthy
     healthcheck:
@@ -136,29 +185,58 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    networks:
+      - eurosky-internal
 
-  # HTTPS health check (optional, only if Traefik is running)
-  eurosky-https-check:
-    extends:
-      file: ../templates/compose.yml
-      service: https-check
+  # Caddy reverse proxy for PUBLIC web access
+  # Uses custom build with rate limiting plugin
+  eurosky-caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    image: eurosky-caddy:latest
+    container_name: eurosky-caddy-${PARTITION:-production}
+    hostname: eurosky-caddy-${PARTITION:-production}
+    ports:
+      - "80:80"      # HTTP (redirects to HTTPS)
+      - "443:443"    # HTTPS (Let's Encrypt automatic)
+      - "2019:2019"  # Admin API (optional, can disable in production)
+    environment:
+      DOMAIN: ${DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+      PARTITION: ${PARTITION:-production}
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - eurosky_caddy_data:/data
+      - eurosky_caddy_config:/config
     depends_on:
       eurosky-web:
         condition: service_healthy
-    environment:
-      HEALTHCHECK_URL: migration.${PARTITION}.${DOMAIN}
-    profiles:
-      - with-traefik
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - eurosky-internal
 
 volumes:
   eurosky_postgres_data:
     name: eurosky-postgres-data-${PARTITION:-production}
   eurosky_redis_data:
     name: eurosky-redis-data-${PARTITION:-production}
-  eurosky_migration_data:
-    name: eurosky-migration-data-${PARTITION:-production}
+  eurosky_tmp_data:
+    name: eurosky-tmp-data-${PARTITION:-production}
+  eurosky_caddy_data:
+    name: eurosky-caddy-data-${PARTITION:-production}
+  eurosky_caddy_config:
+    name: eurosky-caddy-config-${PARTITION:-production}
 
 networks:
-  default:
-    name: u-at-proto_default
+  eurosky-internal:
+    name: eurosky-internal-${PARTITION:-production}
+    driver: bridge
+  u-at-proto_default:
+    # Connect to u-at-proto network to access PDS instances
     external: true

@@ -1,0 +1,28 @@
+# Dockerfile.caddy
+# Custom Caddy build with rate limiting plugin for Eurosky Migration
+#
+# This builds Caddy with the caddy-ratelimit plugin to enforce
+# rate limits on migration endpoints and prevent brute-force attacks
+# on migration tokens.
+#
+# Build: docker build -f Dockerfile.caddy -t eurosky-caddy:latest .
+# Plugin: github.com/mholt/caddy-ratelimit
+
+FROM caddy:2.8-builder AS builder
+
+# Build Caddy with rate limiting plugin
+RUN xcaddy build \
+    --with github.com/mholt/caddy-ratelimit
+
+# Production image
+FROM caddy:2.8-alpine
+
+# Copy custom-built Caddy binary with rate limiting support
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+
+# Verify the build includes the rate limiting module
+RUN caddy list-modules | grep -i rate
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:2019/config/ || exit 1

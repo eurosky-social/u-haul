@@ -1,0 +1,242 @@
+# Caddyfile for Eurosky Migration - Production
+# Handles HTTPS, rate limiting, security headers, and crawler protection
+
+{
+  # Global options
+  email {$LETSENCRYPT_EMAIL}
+
+  # Enable automatic HTTPS via Let's Encrypt
+  auto_https on
+
+  # Admin API (for metrics, debugging - can be disabled in production)
+  admin :2019
+
+  # Performance tuning
+  servers {
+    max_header_size 16KB
+  }
+}
+
+# Main domain - Automatic HTTPS
+{$DOMAIN} {
+  # Rate limiting using Caddy's rate_limit directive
+  # Requires: https://github.com/mholt/caddy-ratelimit module
+  # Alternative: Use route-based logic below for basic rate limiting
+
+  # Security headers (applied to all responses)
+  header {
+    # Prevent indexing by search engines
+    X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+
+    # Prevent clickjacking
+    X-Frame-Options "DENY"
+
+    # XSS protection
+    X-Content-Type-Options "nosniff"
+    X-XSS-Protection "1; mode=block"
+
+    # Referrer policy - don't leak migration tokens
+    Referrer-Policy "no-referrer"
+
+    # Prevent caching of sensitive data
+    Cache-Control "no-store, no-cache, must-revalidate, private, max-age=0"
+    Pragma "no-cache"
+    Expires "0"
+
+    # HSTS - Force HTTPS for 1 year
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # CSP - Restrict resource loading
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
+
+    # Permissions Policy - Disable unnecessary browser features
+    Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+
+    # Remove server header
+    -Server
+  }
+
+  # Enable compression
+  encode gzip zstd
+
+  # Logging to stdout (captured by Docker)
+  log {
+    output stdout
+    format json
+    level INFO
+  }
+
+  # Rate limiting is enforced using the caddy-ratelimit plugin
+  # See endpoint-specific rate limits below for details
+
+  # Block suspicious user agents (bots, scrapers)
+  @scrapers {
+    header User-Agent *bot*
+    header User-Agent *crawler*
+    header User-Agent *spider*
+    header User-Agent *scrape*
+  }
+  handle @scrapers {
+    respond "Automated access not permitted" 403
+  }
+
+  # Block requests with no user agent
+  @no_ua {
+    not header User-Agent *
+  }
+  handle @no_ua {
+    respond "User agent required" 403
+  }
+
+  # Static assets (allow caching)
+  @static {
+    path /assets/*
+    path /packs/*
+    path *.css
+    path *.js
+    path *.png
+    path *.jpg
+    path *.ico
+  }
+  handle @static {
+    header Cache-Control "public, max-age=31536000, immutable"
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000
+  }
+
+  # robots.txt (allow without rate limits)
+  handle /robots.txt {
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000
+  }
+
+  # Health check (allow without rate limits)
+  handle /up {
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000 {
+      health_uri /up
+      health_interval 30s
+      health_timeout 5s
+    }
+  }
+
+  # Migration creation endpoint - Strict rate limiting
+  # Max 5 requests per IP per hour to prevent spam/abuse
+  @migration_create {
+    method POST
+    path /migrations
+  }
+  handle @migration_create {
+    rate_limit {
+      zone migration_create {
+        key {remote_host}
+        events 5
+        window 1h
+      }
+    }
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # PLC token submission - Strict rate limiting
+  # Max 10 requests per IP per hour to prevent brute-force token attacks
+  @plc_token {
+    method POST
+    path_regexp plc /migrate/.*/plc_token
+  }
+  handle @plc_token {
+    rate_limit {
+      zone plc_token_submit {
+        key {remote_host}
+        events 10
+        window 1h
+      }
+    }
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Migration status pages - Moderate rate limiting
+  # Max 100 requests per IP per hour to prevent token enumeration attacks
+  @migration_status {
+    method GET
+    path_regexp status /migrate/.*
+  }
+  handle @migration_status {
+    rate_limit {
+      zone migration_status {
+        key {remote_host}
+        events 100
+        window 1h
+      }
+    }
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # Sidekiq admin interface - Require basic auth
+  @sidekiq {
+    path /sidekiq*
+  }
+  handle @sidekiq {
+    # Basic auth handled by Rails
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000 {
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  # All other requests - Default reverse proxy
+  handle {
+    reverse_proxy eurosky-web-{$PARTITION:production}:3000 {
+      # Forward headers for proper client IP detection
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+
+      # Health checks
+      health_uri /up
+      health_interval 30s
+      health_timeout 5s
+      health_status 2xx
+
+      # Connection pooling
+      transport http {
+        keepalive 30s
+        keepalive_idle_conns 10
+      }
+    }
+  }
+
+  # Error pages
+  handle_errors {
+    @404 expression `{err.status_code} == 404`
+    handle @404 {
+      respond "Not Found" 404
+    }
+
+    @429 expression `{err.status_code} == 429`
+    handle @429 {
+      respond "Too Many Requests - Please slow down" 429
+    }
+
+    @5xx expression `{err.status_code} >= 500 && {err.status_code} < 600`
+    handle @5xx {
+      respond "Service Temporarily Unavailable" 503
+    }
+
+    respond "{err.status_text}" {err.status_code}
+  }
+}
+
+# Optional: Redirect www to non-www
+www.{$DOMAIN} {
+  redir https://{$DOMAIN}{uri} permanent
+}

@@ -28,6 +28,7 @@
 
 class MigrationsController < ApplicationController
   before_action :set_migration, only: [:show, :submit_plc_token, :status, :download_backup, :retry, :cancel]
+  before_action :set_security_headers
 
   # GET /migrations/new
   # Display the migration form where users enter their account details
@@ -496,5 +497,25 @@ class MigrationsController < ApplicationController
   rescue JSON::ParserError, HTTParty::Error, StandardError => e
     Rails.logger.error("Failed to check account existence: #{e.message}")
     raise "Unable to verify account existence: #{e.message}"
+  end
+
+  # Set security headers to prevent indexing and caching of sensitive migration data
+  # These headers provide defense-in-depth alongside robots.txt and meta tags
+  def set_security_headers
+    # Prevent search engine indexing via HTTP header
+    response.headers['X-Robots-Tag'] = 'noindex, nofollow, noarchive, nosnippet'
+
+    # Prevent caching of sensitive migration status pages
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+
+    # Security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+
+    # Referrer policy - don't leak migration tokens in referrer
+    response.headers['Referrer-Policy'] = 'no-referrer'
   end
 end
