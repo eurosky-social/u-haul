@@ -648,9 +648,9 @@ class GoatService
     logger.info("Deactivating account on old PDS")
 
     # Must be logged in to old PDS
-    # login_old_pds
+    login_old_pds
 
-    # execute_goat('account', 'deactivate')
+    execute_goat('account', 'deactivate')
 
     logger.info("Account deactivated on old PDS")
   rescue StandardError => e
