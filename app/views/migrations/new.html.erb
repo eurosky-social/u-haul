@@ -5,158 +5,589 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="googlebot" content="noindex, nofollow, noarchive">
+  <%= csrf_meta_tags %>
   <title><%= EuroskyConfig::SITE_NAME %> - Start Account Migration</title>
   <% if EuroskyConfig::FAVICON_URL.present? %>
     <link rel="icon" type="image/png" href="<%= EuroskyConfig::FAVICON_URL %>">
   <% end %>
   <%= render 'shared/styles' %>
+  <style>
+    .wizard-step {
+      display: none;
+    }
+
+    .wizard-step.active {
+      display: block;
+    }
+
+    .wizard-progress {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding: 0 20px;
+    }
+
+    .wizard-progress-step {
+      flex: 1;
+      text-align: center;
+      position: relative;
+    }
+
+    .wizard-progress-step::before {
+      content: '';
+      position: absolute;
+      top: 15px;
+      left: -50%;
+      right: 50%;
+      height: 2px;
+      background-color: #ddd;
+      z-index: -1;
+    }
+
+    .wizard-progress-step:first-child::before {
+      display: none;
+    }
+
+    .wizard-progress-step.active::before,
+    .wizard-progress-step.completed::before {
+      background-color: #007bff;
+    }
+
+    .wizard-progress-circle {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background-color: #ddd;
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .wizard-progress-step.active .wizard-progress-circle {
+      background-color: #007bff;
+    }
+
+    .wizard-progress-step.completed .wizard-progress-circle {
+      background-color: #28a745;
+    }
+
+    .wizard-progress-label {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .wizard-progress-step.active .wizard-progress-label {
+      color: #007bff;
+      font-weight: 500;
+    }
+
+    .wizard-navigation {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .wizard-back-btn {
+      background-color: #6c757d;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .wizard-back-btn:hover {
+      background-color: #5a6268;
+    }
+
+    .readonly-field {
+      background-color: #f5f5f5;
+      color: #666;
+      cursor: not-allowed;
+    }
+
+    .lookup-status {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .lookup-info {
+      background-color: #e3f2fd;
+      color: #1565c0;
+      border: 1px solid #90caf9;
+    }
+
+    .lookup-success {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #81c784;
+    }
+
+    .lookup-error {
+      background-color: #ffebee;
+      color: #c62828;
+      border: 1px solid #ef9a9a;
+    }
+
+    .form-select {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      background-color: white;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .form-select:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+
+    .form-select:hover {
+      border-color: #bbb;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      transition: border-color 0.2s;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+  </style>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const form = document.querySelector('form');
 
-      // Field definitions with validation rules
-      const fields = {
-        email: {
-          element: document.getElementById('migration_email'),
-          errorElement: document.getElementById('email-error'),
-          validate: function(value) {
-            if (!value || value.trim() === '') return 'Email address is required';
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(value)) return 'Please enter a valid email address';
-            return null;
-          }
-        },
-        old_handle: {
-          element: document.getElementById('migration_old_handle'),
-          errorElement: document.getElementById('old-handle-error'),
-          validate: function(value) {
-            if (!value || value.trim() === '') return 'Old handle is required';
-            if (!value.includes('.')) return 'Handle must include a domain (e.g., user.bsky.social)';
-            return null;
-          }
-        },
-        password: {
-          element: document.getElementById('migration_password'),
-          errorElement: document.getElementById('password-error'),
-          validate: function(value) {
-            if (!value || value.trim() === '') return 'Password is required';
-            if (value.length < 8) return 'Password must be at least 8 characters';
-            return null;
-          }
-        },
-        <% if EuroskyConfig.invite_code_enabled? %>
-        invite_code: {
-          element: document.getElementById('migration_invite_code'),
-          errorElement: document.getElementById('invite-code-error'),
-          validate: function(value) {
-            <% if EuroskyConfig.invite_code_required? %>
-            if (!value || value.trim() === '') return 'Invite code is required';
-            <% end %>
-            // Basic format validation (alphanumeric + hyphens)
-            if (value && !/^[a-zA-Z0-9-]+$/.test(value)) {
-              return 'Invite code can only contain letters, numbers, and hyphens';
-            }
-            return null;
-          }
-        },
-        <% end %>
-        new_pds_host: {
-          element: document.getElementById('migration_new_pds_host'),
-          errorElement: document.getElementById('new-pds-host-error'),
-          validate: function(value) {
-            <% if EuroskyConfig.bound_mode? %>
-            // In bound mode, field is read-only and always valid
-            return null;
-            <% else %>
-            if (!value || value.trim() === '') return 'New PDS host is required';
-            // Accept both with and without https://
-            const urlRegex = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
-            if (!urlRegex.test(value)) return 'Please enter a valid PDS host (e.g., pds.example.com)';
-            return null;
-            <% end %>
-          }
-        },
-        new_handle: {
-          element: document.getElementById('migration_new_handle'),
-          errorElement: document.getElementById('new-handle-error'),
-          validate: function(value) {
-            if (!value || value.trim() === '') return 'New handle is required';
-            if (!value.includes('.')) return 'Handle must include a domain (e.g., user.eurosky.social)';
-            return null;
-          }
-        }
+      // Form fields
+      const handleField = document.getElementById('migration_old_handle');
+      const passwordField = document.getElementById('migration_password');
+      const emailField = document.getElementById('migration_email');
+      const pdsSelect = document.getElementById('pds-select');
+      const customPdsField = document.getElementById('migration_new_pds_host');
+      const inviteCodeField = document.getElementById('migration_invite_code');
+
+      // Steps
+      const step1 = document.getElementById('step-1');
+      const step2 = document.getElementById('step-2');
+      const step3 = document.getElementById('step-3');
+      const step4 = document.getElementById('step-4');
+      const step5 = document.getElementById('step-5');
+
+      // Wizard state
+      let wizardData = {
+        email: null,
+        emailReadonly: false,
+        authenticated: false,
+        pdsHost: null,
+        availableDomains: []
       };
 
-      // Validate a single field
-      function validateField(fieldName) {
-        const field = fields[fieldName];
-        if (!field || !field.element) return true;
+      // Progress indicators
+      const progress1 = document.getElementById('progress-1');
+      const progress2 = document.getElementById('progress-2');
+      const progress3 = document.getElementById('progress-3');
+      const progress4 = document.getElementById('progress-4');
+      const progress5 = document.getElementById('progress-5');
 
-        const value = field.element.value;
-        const error = field.validate(value);
+      // Initialize
+      showStep(1);
 
-        if (error) {
-          field.element.classList.add('field-error');
-          if (field.errorElement) {
-            field.errorElement.textContent = error;
-            field.errorElement.classList.add('visible');
-          }
-          return false;
-        } else {
-          field.element.classList.remove('field-error');
-          if (field.errorElement) {
-            field.errorElement.classList.remove('visible');
-          }
-          return true;
+      // Show/hide steps
+      function showStep(stepNumber) {
+        [step1, step2, step3, step4, step5].forEach(s => s.classList.remove('active'));
+        [progress1, progress2, progress3, progress4, progress5].forEach(p => p.classList.remove('active', 'completed'));
+
+        if (stepNumber === 1) {
+          step1.classList.add('active');
+          progress1.classList.add('active');
+        }
+        if (stepNumber === 2) {
+          step2.classList.add('active');
+          progress1.classList.add('completed');
+          progress2.classList.add('active');
+        }
+        if (stepNumber === 3) {
+          step3.classList.add('active');
+          progress1.classList.add('completed');
+          progress2.classList.add('completed');
+          progress3.classList.add('active');
+        }
+        if (stepNumber === 4) {
+          step4.classList.add('active');
+          progress1.classList.add('completed');
+          progress2.classList.add('completed');
+          progress3.classList.add('completed');
+          progress4.classList.add('active');
+        }
+        if (stepNumber === 5) {
+          step5.classList.add('active');
+          [progress1, progress2, progress3, progress4].forEach(p => p.classList.add('completed'));
+          progress5.classList.add('active');
         }
       }
 
-      // Validate all fields
-      function validateAllFields() {
-        let isValid = true;
-        Object.keys(fields).forEach(function(fieldName) {
-          if (!validateField(fieldName)) {
-            isValid = false;
-          }
-        });
-        return isValid;
+      // Utility: Show status message
+      function showStatus(element, message, type) {
+        element.textContent = message;
+        element.className = 'lookup-status lookup-' + type;
+        element.style.display = 'block';
       }
 
-      // Add real-time validation on blur
-      Object.keys(fields).forEach(function(fieldName) {
-        const field = fields[fieldName];
-        if (field.element) {
-          field.element.addEventListener('blur', function() {
-            validateField(fieldName);
-          });
+      // STEP 1: Handle & Password
+      document.getElementById('step1-next').addEventListener('click', function(e) {
+        e.preventDefault();
 
-          // Clear error on input
-          field.element.addEventListener('input', function() {
-            if (field.element.classList.contains('field-error')) {
-              validateField(fieldName);
-            }
-          });
+        const handle = handleField.value.trim();
+        const password = passwordField.value.trim();
+        const btn = e.target;
+        const status = document.getElementById('step1-status');
+
+        if (!handle) {
+          showStatus(status, 'Please enter a handle', 'error');
+          return;
+        }
+
+        if (!password) {
+          showStatus(status, 'Please enter your password', 'error');
+          return;
+        }
+
+        if (!handle.includes('.')) {
+          showStatus(status, 'Handle must include a domain (e.g., user.bsky.social)', 'error');
+          return;
+        }
+
+        // If already authenticated and fields are readonly, proceed to step 2
+        if (wizardData.authenticated) {
+          showStep(2);
+          setupStep2();
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Authenticating...';
+        showStatus(status, 'Authenticating and fetching your account details...', 'info');
+
+        fetch('/migrations/lookup_handle', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: JSON.stringify({ handle: handle, password: password })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            showStatus(status, data.error, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+            return;
+          }
+
+          showStatus(status, 'Authentication successful!', 'success');
+
+          // Store email data and mark as authenticated
+          wizardData.authenticated = true;
+          if (data.email) {
+            wizardData.email = data.email;
+            wizardData.emailReadonly = true;
+          } else {
+            wizardData.email = '';
+            wizardData.emailReadonly = false;
+          }
+
+          // Proceed to step 2
+          setTimeout(() => {
+            handleField.readOnly = true;
+            passwordField.readOnly = true;
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+            showStep(2);
+            setupStep2();
+          }, 500);
+        })
+        .catch(error => {
+          showStatus(status, 'Network error. Please try again.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Continue';
+        });
+      });
+
+      // STEP 2: Email
+      function setupStep2() {
+        emailField.value = wizardData.email || '';
+        if (wizardData.emailReadonly) {
+          emailField.readOnly = true;
+          emailField.classList.add('readonly-field');
+          document.querySelector('#step-2 .helper-text').textContent = 'Email retrieved from your account';
+        } else {
+          emailField.readOnly = false;
+          emailField.classList.remove('readonly-field');
+          document.querySelector('#step-2 .helper-text').textContent = 'We couldn\'t retrieve your email. Please enter it manually.';
+          emailField.focus();
+        }
+      }
+
+      document.getElementById('step2-back').addEventListener('click', function(e) {
+        e.preventDefault();
+        // Don't reset readonly state - keep authenticated fields readonly
+        showStep(1);
+      });
+
+      document.getElementById('step2-next').addEventListener('click', function(e) {
+        e.preventDefault();
+
+        const email = emailField.value.trim();
+        if (!email) {
+          alert('Please enter your email address');
+          return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          alert('Please enter a valid email address');
+          return;
+        }
+
+        wizardData.email = email;
+        emailField.readOnly = true;
+        showStep(3);
+      });
+
+      // STEP 3: PDS Selection
+      document.getElementById('step3-back').addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!wizardData.emailReadonly) {
+          emailField.readOnly = false;
+        }
+        showStep(2);
+      });
+
+      document.getElementById('step3-next').addEventListener('click', function(e) {
+        e.preventDefault();
+
+        const selectedPds = pdsSelect.value || customPdsField.value.trim();
+        if (!selectedPds) {
+          alert('Please select a PDS');
+          return;
+        }
+
+        // Check if invite code is required and empty
+        if (inviteCodeField.required && !inviteCodeField.value.trim()) {
+          alert('Please enter an invite code');
+          return;
+        }
+
+        wizardData.pdsHost = selectedPds;
+        showStep(4);
+        setupStep4();
+      });
+
+      // PDS selection
+      pdsSelect.addEventListener('change', function(e) {
+        const selectedValue = e.target.value;
+        const customGroup = document.getElementById('custom-pds-group');
+        const inviteGroup = document.getElementById('invite-code-group');
+        const status = document.getElementById('pds-status');
+
+        if (selectedValue === 'custom') {
+          customGroup.style.display = 'block';
+          customPdsField.value = '';
+          customPdsField.focus();
+          inviteGroup.style.display = 'none';
+          status.style.display = 'none';
+        } else if (selectedValue) {
+          customGroup.style.display = 'none';
+          customPdsField.value = selectedValue;
+          checkPdsRequirements(selectedValue, status, inviteGroup);
+        } else {
+          customGroup.style.display = 'none';
+          inviteGroup.style.display = 'none';
+          status.style.display = 'none';
         }
       });
 
-      // Form submission with validation
+      // Custom PDS
+      document.getElementById('custom-pds-continue-btn').addEventListener('click', function(e) {
+        e.preventDefault();
+        const pdsHost = customPdsField.value.trim();
+        if (!pdsHost) {
+          alert('Please enter a PDS URL');
+          return;
+        }
+        const status = document.getElementById('custom-pds-status');
+        const inviteGroup = document.getElementById('invite-code-group');
+        checkPdsRequirements(pdsHost, status, inviteGroup);
+      });
+
+      // Check PDS requirements
+      function checkPdsRequirements(pdsHost, statusElement, inviteGroup) {
+        showStatus(statusElement, 'Checking PDS requirements...', 'info');
+
+        fetch('/migrations/check_pds', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: JSON.stringify({ pds_host: pdsHost })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            showStatus(statusElement, data.error, 'error');
+            inviteGroup.style.display = 'none';
+            return;
+          }
+
+          showStatus(statusElement, 'PDS verified!', 'success');
+
+          // Store available domains for step 4
+          wizardData.availableDomains = data.available_user_domains || [];
+
+          if (data.invite_code_required) {
+            inviteGroup.style.display = 'block';
+            inviteCodeField.required = true;
+            inviteCodeField.setAttribute('required', 'required');
+          } else {
+            inviteGroup.style.display = 'none';
+            inviteCodeField.required = false;
+            inviteCodeField.removeAttribute('required');
+          }
+        })
+        .catch(error => {
+          showStatus(statusElement, 'Failed to verify PDS. Please check the URL.', 'error');
+          inviteGroup.style.display = 'none';
+        });
+      }
+
+      // STEP 4: New Handle
+      const newHandleInput = document.getElementById('new-handle-input');
+      const newHandleSuffix = document.getElementById('new-handle-suffix');
+
+      function setupStep4() {
+        // Set the domain suffix
+        if (wizardData.availableDomains.length > 0) {
+          const domain = wizardData.availableDomains[0];
+          newHandleSuffix.textContent = domain.startsWith('.') ? domain : '.' + domain;
+        } else {
+          // Extract domain from PDS host
+          const pdsUrl = new URL(wizardData.pdsHost);
+          newHandleSuffix.textContent = '.' + pdsUrl.hostname;
+        }
+        newHandleInput.value = '';
+        newHandleInput.focus();
+      }
+
+      document.getElementById('step4-back').addEventListener('click', function(e) {
+        e.preventDefault();
+        showStep(3);
+      });
+
+      document.getElementById('step4-next').addEventListener('click', function(e) {
+        e.preventDefault();
+
+        const handleUsername = newHandleInput.value.trim();
+        if (!handleUsername) {
+          alert('Please enter a handle');
+          return;
+        }
+
+        const fullHandle = handleUsername + newHandleSuffix.textContent;
+        const btn = e.target;
+        const status = document.getElementById('step4-status');
+
+        btn.disabled = true;
+        btn.textContent = 'Checking availability...';
+        showStatus(status, 'Checking if handle is available...', 'info');
+
+        // Check handle availability
+        fetch('/migrations/check_handle', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: JSON.stringify({
+            handle: fullHandle,
+            pds_host: wizardData.pdsHost
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          btn.disabled = false;
+          btn.textContent = 'Continue';
+
+          if (data.error) {
+            showStatus(status, data.error, 'error');
+            return;
+          }
+
+          if (!data.available) {
+            showStatus(status, 'This handle is already taken. Please choose another.', 'error');
+            return;
+          }
+
+          showStatus(status, 'Handle is available!', 'success');
+
+          // Store in hidden field and proceed
+          document.getElementById('migration_new_handle').value = fullHandle;
+
+          setTimeout(() => {
+            showStep(5);
+            setupStep5();
+          }, 500);
+        })
+        .catch(error => {
+          btn.disabled = false;
+          btn.textContent = 'Continue';
+          showStatus(status, 'Failed to check availability. Please try again.', 'error');
+        });
+      });
+
+      // STEP 5: Summary
+      function setupStep5() {
+        document.getElementById('summary-handle').textContent = handleField.value;
+        document.getElementById('summary-email').textContent = emailField.value;
+        document.getElementById('summary-pds').textContent = wizardData.pdsHost;
+        document.getElementById('summary-new-handle').textContent = document.getElementById('migration_new_handle').value;
+
+        if (inviteCodeField.value.trim()) {
+          document.getElementById('summary-invite-row').style.display = 'table-row';
+          document.getElementById('summary-invite').textContent = inviteCodeField.value;
+        } else {
+          document.getElementById('summary-invite-row').style.display = 'none';
+        }
+      }
+
+      document.getElementById('step5-back').addEventListener('click', function(e) {
+        e.preventDefault();
+        showStep(4);
+      });
+
+      // Form submission
       form.addEventListener('submit', function(event) {
         event.preventDefault();
 
-        // Validate all fields first
-        if (!validateAllFields()) {
-          // Scroll to first error
-          const firstError = document.querySelector('.field-error');
-          if (firstError) {
-            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            firstError.focus();
-          }
-          return false;
-        }
-
-        // Show confirmation dialog only if validation passes
         const confirmed = confirm('Are you ready to start the migration? This process will begin immediately and cannot be stopped once started.');
-
         if (confirmed) {
           form.submit();
         }
@@ -195,99 +626,192 @@
           <li>You will need a PLC operation token from <a href="https://plc.directory" target="_blank" rel="noopener">plc.directory</a></li>
           <li>Make sure your new PDS is ready to accept your account</li>
         </ul>
-        <h4>Returning to Bluesky?</h4>
-        <p>If you're migrating back to <strong>bsky.social</strong> from another PDS, this tool will automatically detect that and log you into your existing Bluesky account instead of creating a new one. Just enter <code>bsky.social</code> as your new PDS host.</p>
-        <p style="margin-top: 8px;"><strong>Important:</strong> You can ONLY migrate back to Bluesky if you previously had a <code>bsky.social</code> account. The tool will verify that your account exists on Bluesky before starting the migration. If you've never had a Bluesky account, you cannot migrate to it - Bluesky does not accept new accounts via migration.</p>
       </div>
 
       <%= form_with model: @migration, url: migrations_path, local: true, html: { novalidate: true } do |f| %>
-        <div class="form-group">
-          <%= f.label :email, "Email Address" %>
-          <%= f.email_field :email, id: "migration_email", placeholder: "you@example.com", autocomplete: "email" %>
-          <div class="helper-text">We'll send migration status updates to this email</div>
-          <div id="email-error" class="error-message"></div>
+
+        <!-- Progress Indicator -->
+        <div class="wizard-progress">
+          <div id="progress-1" class="wizard-progress-step">
+            <div class="wizard-progress-circle">1</div>
+            <div class="wizard-progress-label">Account</div>
+          </div>
+          <div id="progress-2" class="wizard-progress-step">
+            <div class="wizard-progress-circle">2</div>
+            <div class="wizard-progress-label">Email</div>
+          </div>
+          <div id="progress-3" class="wizard-progress-step">
+            <div class="wizard-progress-circle">3</div>
+            <div class="wizard-progress-label">PDS</div>
+          </div>
+          <div id="progress-4" class="wizard-progress-step">
+            <div class="wizard-progress-circle">4</div>
+            <div class="wizard-progress-label">Handle</div>
+          </div>
+          <div id="progress-5" class="wizard-progress-step">
+            <div class="wizard-progress-circle">5</div>
+            <div class="wizard-progress-label">Review</div>
+          </div>
         </div>
 
-        <div class="form-group">
-          <%= f.label :old_handle, "Old Handle" %>
-          <%= f.text_field :old_handle, id: "migration_old_handle", placeholder: "yourhandle.bsky.social", autocomplete: "username" %>
-          <div class="helper-text">Your current AT Protocol handle (we'll automatically find your PDS)</div>
-          <div id="old-handle-error" class="error-message"></div>
-        </div>
+        <!-- STEP 1: Handle & Password -->
+        <div id="step-1" class="wizard-step">
+          <h2>Step 1: Account Credentials</h2>
 
-        <div class="form-group">
-          <%= f.label :password, "Account Password" %>
-          <%= f.password_field :password, id: "migration_password", autocomplete: "current-password" %>
-          <div class="helper-text">Your current account password for authentication</div>
-          <div id="password-error" class="error-message"></div>
-        </div>
-
-        <% if EuroskyConfig.invite_code_enabled? %>
           <div class="form-group">
-            <%= f.label :invite_code, "Invite Code#{' (required)' if EuroskyConfig.invite_code_required?}".html_safe %>
-            <%= f.text_field :invite_code,
-                             id: "migration_invite_code",
-                             placeholder: "Enter your invite code",
-                             autocomplete: "off",
-                             required: EuroskyConfig.invite_code_required? %>
-            <div class="helper-text">
-              <% if EuroskyConfig.invite_code_required? %>
-                An invite code is required to create an account on this PDS
-              <% else %>
-                Optional invite code if your target PDS requires one
-              <% end %>
+            <%= f.label :old_handle, "Your Handle" %>
+            <%= f.text_field :old_handle, id: "migration_old_handle", placeholder: "yourhandle.bsky.social", autocomplete: "username" %>
+            <div class="helper-text">Enter your current AT Protocol handle</div>
+          </div>
+
+          <div class="form-group">
+            <%= f.label :password, "Account Password" %>
+            <%= f.password_field :password, id: "migration_password", autocomplete: "current-password" %>
+            <div class="helper-text">Your current account password</div>
+          </div>
+
+          <div id="step1-status" class="lookup-status"></div>
+
+          <div class="wizard-navigation">
+            <button type="button" id="step1-next" class="submit-button">Continue</button>
+          </div>
+        </div>
+
+        <!-- STEP 2: Email -->
+        <div id="step-2" class="wizard-step">
+          <h2>Step 2: Email Address</h2>
+
+          <div class="form-group">
+            <%= f.label :email, "Email Address" %>
+            <%= f.email_field :email, id: "migration_email", placeholder: "you@example.com", autocomplete: "email" %>
+            <div class="helper-text">We'll send migration status updates to this email</div>
+          </div>
+
+          <div class="wizard-navigation">
+            <button type="button" id="step2-back" class="wizard-back-btn">Back</button>
+            <button type="button" id="step2-next" class="submit-button">Continue</button>
+          </div>
+        </div>
+
+        <!-- STEP 3: Destination PDS -->
+        <div id="step-3" class="wizard-step">
+          <h2>Step 3: Destination PDS</h2>
+
+          <div class="form-group">
+            <label for="pds-select">Destination PDS</label>
+            <select id="pds-select" class="form-select">
+              <option value="">Select a PDS...</option>
+              <option value="https://eurosky.social">Eurosky (eurosky.social)</option>
+              <option value="https://blacksky.app">Blacksky (blacksky.app)</option>
+              <option value="https://myatproto.social">myatproto (myatproto.social)</option>
+              <option value="https://bsky.social">Bluesky (bsky.social)</option>
+              <option value="custom">Custom PDS...</option>
+            </select>
+            <div class="helper-text">Choose where you want to migrate your account</div>
+          </div>
+
+          <div id="custom-pds-group" class="form-group" style="display: none; margin-top: 16px;">
+            <%= f.label :new_pds_host, "Custom PDS URL" %>
+            <%= f.text_field :new_pds_host, id: "migration_new_pds_host", placeholder: "https://pds.example.com", autocomplete: "url" %>
+            <div class="helper-text">Enter the full URL of your custom PDS</div>
+            <button type="button" id="custom-pds-continue-btn" class="submit-button" style="margin-top: 12px;">Continue</button>
+            <div id="custom-pds-status" class="lookup-status"></div>
+          </div>
+
+          <div id="pds-status" class="lookup-status"></div>
+
+          <div id="invite-code-group" class="form-group" style="display: none; margin-top: 24px;">
+            <%= f.label :invite_code, "Invite Code" %>
+            <%= f.text_field :invite_code, id: "migration_invite_code", placeholder: "Enter your invite code", autocomplete: "off" %>
+            <div class="helper-text">This PDS requires an invite code</div>
+          </div>
+
+          <div class="wizard-navigation">
+            <button type="button" id="step3-back" class="wizard-back-btn">Back</button>
+            <button type="button" id="step3-next" class="submit-button">Continue</button>
+          </div>
+        </div>
+
+        <!-- STEP 4: New Handle -->
+        <div id="step-4" class="wizard-step">
+          <h2>Step 4: New Handle</h2>
+
+          <div class="form-group">
+            <label for="new-handle-input">Your New Handle</label>
+            <div style="position: relative;">
+              <input type="text" id="new-handle-input" class="form-control" placeholder="username" style="padding-right: 200px;">
+              <span id="new-handle-suffix" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none;"></span>
             </div>
-            <div id="invite-code-error" class="error-message"></div>
+            <div class="helper-text">Choose your new handle on the destination PDS</div>
+            <%= f.hidden_field :new_handle, id: "migration_new_handle" %>
           </div>
-        <% end %>
 
-        <div class="form-group">
-          <%= f.label :new_pds_host, "New PDS Host" %>
-          <% if EuroskyConfig.bound_mode? %>
-            <%= f.text_field :new_pds_host,
-                             id: "migration_new_pds_host",
-                             value: EuroskyConfig::TARGET_PDS_HOST,
-                             readonly: true,
-                             class: "readonly-field" %>
-            <div class="helper-text">This migration service is configured for <%= EuroskyConfig::TARGET_PDS_HOST %></div>
-          <% else %>
-            <%= f.text_field :new_pds_host,
-                             id: "migration_new_pds_host",
-                             placeholder: "pds.eurosky.social or https://pds.newhost.com",
-                             autocomplete: "url" %>
-            <div class="helper-text">The hostname of your destination PDS (with or without https://)</div>
-            <div id="new-pds-host-error" class="error-message"></div>
-          <% end %>
-        </div>
+          <div id="step4-status" class="lookup-status"></div>
 
-        <div class="form-group">
-          <%= f.label :new_handle, "New Handle" %>
-          <%= f.text_field :new_handle, id: "migration_new_handle", placeholder: "yourhandle.eurosky.social", autocomplete: "username" %>
-          <div class="helper-text">Your new AT Protocol handle on the destination PDS</div>
-          <div id="new-handle-error" class="error-message"></div>
-        </div>
-
-        <div class="form-group checkbox-group">
-          <label class="checkbox-label">
-            <%= f.check_box :create_backup_bundle, id: "migration_create_backup_bundle", checked: true %>
-            <span>Create backup bundle before migration</span>
-          </label>
-          <div class="helper-text">
-            Recommended: Download a complete backup of your account data (posts + media) before migration.
-            The backup will be available for 24 hours. If disabled, migration will start immediately.
+          <div class="wizard-navigation">
+            <button type="button" id="step4-back" class="wizard-back-btn">Back</button>
+            <button type="button" id="step4-next" class="submit-button">Continue</button>
           </div>
         </div>
 
-        <div class="security-note" role="note">
-          <h3>Security & Privacy</h3>
-          <p>
-            Your password is encrypted and stored securely for 48 hours, then automatically deleted.
-            It is only used to authenticate with your old PDS during migration.
-            We never store or transmit your password in plaintext.
-          </p>
+        <!-- STEP 5: Summary & Backup -->
+        <div id="step-5" class="wizard-step">
+          <h2>Step 5: Review & Confirm</h2>
+
+          <div class="form-group">
+            <h3 style="margin-bottom: 16px;">Migration Summary</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 12px 0; font-weight: 500;">Current Handle:</td>
+                <td style="padding: 12px 0;" id="summary-handle"></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 12px 0; font-weight: 500;">Email:</td>
+                <td style="padding: 12px 0;" id="summary-email"></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 12px 0; font-weight: 500;">Destination PDS:</td>
+                <td style="padding: 12px 0;" id="summary-pds"></td>
+              </tr>
+              <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 12px 0; font-weight: 500;">New Handle:</td>
+                <td style="padding: 12px 0; font-weight: 600; color: #007bff;" id="summary-new-handle"></td>
+              </tr>
+              <tr id="summary-invite-row" style="border-bottom: 1px solid #ddd; display: none;">
+                <td style="padding: 12px 0; font-weight: 500;">Invite Code:</td>
+                <td style="padding: 12px 0;" id="summary-invite"></td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="margin-top: 32px; padding: 24px; background: #f0f7ff; border: 2px solid #007bff; border-radius: 8px;">
+            <h3 style="margin-top: 0; color: #007bff; font-size: 20px;">📦 Backup Your Data</h3>
+            <div class="form-group checkbox-group" style="margin: 0;">
+              <label class="checkbox-label" style="font-size: 18px; font-weight: 500;">
+                <%= f.check_box :create_backup_bundle, id: "migration_create_backup_bundle", checked: true, style: "width: 20px; height: 20px; margin-right: 12px;" %>
+                <span>Create backup bundle before migration</span>
+              </label>
+              <div style="margin-top: 16px; padding: 16px; background: white; border-radius: 6px; border-left: 4px solid #28a745;">
+                <strong style="color: #28a745;">✓ Highly Recommended</strong>
+                <p style="margin: 8px 0 0 0; font-size: 15px; line-height: 1.6;">
+                  Download a complete backup of your account data (all posts + media) before migration.
+                  The backup will be available for 24 hours and sent to your email.
+                </p>
+                <ul style="margin: 12px 0 0 20px; font-size: 14px; line-height: 1.8;">
+                  <li>Protects against data loss during migration</li>
+                  <li>Includes all your posts, media, and account data</li>
+                  <li>Can be used to restore your account if needed</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-navigation">
+            <button type="button" id="step5-back" class="wizard-back-btn">Back</button>
+            <%= f.submit "Start Migration", class: "submit-button" %>
+          </div>
         </div>
 
-        <%= f.submit "Start Migration", class: "submit-button" %>
       <% end %>
     </div>
   </div>

@@ -1,6 +1,17 @@
 class MigrationMailer < ApplicationMailer
   default from: ENV.fetch('MAILER_FROM_EMAIL', 'noreply@eurosky-migration.local')
 
+  def account_password(migration, password)
+    @migration = migration
+    @password = password
+    @migration_url = migration_by_token_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))
+
+    mail(
+      to: migration.email,
+      subject: "Your New Account Password for #{migration.new_handle} (#{migration.token})"
+    )
+  end
+
   def backup_ready(migration)
     @migration = migration
     @download_url = migration_download_backup_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))

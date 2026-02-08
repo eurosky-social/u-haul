@@ -41,6 +41,155 @@ class MigrationsController < ApplicationController
     end
   end
 
+  # POST /migrations/check_handle
+  # Check if a handle is available on a PDS (AJAX endpoint)
+  #
+  # Params:
+  #   - handle: Full handle to check (e.g., username.eurosky.social)
+  #   - pds_host: PDS host URL
+  #
+  # Response:
+  #   - Success: { available: true/false }
+  #   - Failure: { error: 'message' }
+  def check_handle
+    handle = params[:handle]&.strip
+    pds_host = params[:pds_host]&.strip
+
+    if handle.blank?
+      render json: { error: 'Handle is required' }, status: :bad_request
+      return
+    end
+
+    if pds_host.blank?
+      render json: { error: 'PDS host is required' }, status: :bad_request
+      return
+    end
+
+    # Normalize PDS host
+    pds_host = normalize_pds_host(pds_host)
+
+    # Try to resolve the handle
+    begin
+      resolution = GoatService.resolve_handle(handle)
+      # Handle exists - check if it's on a different PDS
+      if resolution[:pds_host] == pds_host
+        # Handle exists on this PDS - not available
+        render json: { available: false }
+      else
+        # Handle exists on different PDS - available on this PDS
+        render json: { available: true }
+      end
+    rescue GoatService::NetworkError
+      # Handle doesn't exist - available
+      render json: { available: true }
+    rescue StandardError => e
+      Rails.logger.error("Error checking handle availability: #{e.message}")
+      render json: { error: "Failed to check handle availability" }, status: :internal_server_error
+    end
+  end
+
+  # POST /migrations/check_pds
+  # Check PDS requirements (invite code, etc.) (AJAX endpoint)
+  #
+  # Params:
+  #   - pds_host: PDS host URL (e.g., https://eurosky.social)
+  #
+  # Response:
+  #   - Success: { invite_code_required: true/false, available_user_domains: [...] }
+  #   - Failure: { error: 'message' }
+  def check_pds
+    pds_host = params[:pds_host]&.strip
+
+    if pds_host.blank?
+      render json: { error: 'PDS host is required' }, status: :bad_request
+      return
+    end
+
+    # Normalize PDS host (add https:// if missing)
+    pds_host = normalize_pds_host(pds_host)
+
+    # Query the PDS describeServer endpoint
+    describe_url = "#{pds_host}/xrpc/com.atproto.server.describeServer"
+
+    response = HTTParty.get(describe_url, timeout: 10)
+
+    unless response.success?
+      render json: { error: "Could not connect to PDS. Please check the URL." }, status: :not_found
+      return
+    end
+
+    server_info = JSON.parse(response.body)
+
+    # Check if invite codes are required
+    invite_code_required = server_info['inviteCodeRequired'] || false
+    available_user_domains = server_info['availableUserDomains'] || []
+
+    Rails.logger.info("PDS #{pds_host} - Invite code required: #{invite_code_required}")
+
+    render json: {
+      invite_code_required: invite_code_required,
+      available_user_domains: available_user_domains
+    }
+  rescue JSON::ParserError => e
+    Rails.logger.error("Failed to parse PDS response: #{e.message}")
+    render json: { error: "Invalid response from PDS" }, status: :internal_server_error
+  rescue HTTParty::Error, StandardError => e
+    Rails.logger.error("Failed to check PDS requirements: #{e.message}")
+    render json: { error: "Failed to connect to PDS: #{e.message}" }, status: :internal_server_error
+  end
+
+  # POST /migrations/lookup_handle
+  # Authenticate and fetch account details (AJAX endpoint)
+  #
+  # Params:
+  #   - handle: AT Protocol handle (e.g., user.bsky.social)
+  #   - password: Account password
+  #
+  # Response:
+  #   - Success: { did: '...', email: '...', pds_host: '...' }
+  #   - Failure: { error: 'message' }
+  def lookup_handle
+    handle = params[:handle]&.strip
+    password = params[:password]&.strip
+
+    if handle.blank?
+      render json: { error: 'Handle is required' }, status: :bad_request
+      return
+    end
+
+    if password.blank?
+      render json: { error: 'Password is required' }, status: :bad_request
+      return
+    end
+
+    # Sanitize handle
+    handle = sanitize_handle(handle)
+
+    # Resolve handle to DID and PDS
+    resolution = GoatService.resolve_handle(handle)
+    pds_host = resolution[:pds_host]
+    did = resolution[:did]
+
+    # Authenticate and get session to fetch email
+    account_details = authenticate_and_fetch_profile(pds_host, handle, password)
+
+    render json: {
+      did: did,
+      pds_host: pds_host,
+      email: account_details[:email],
+      handle: account_details[:handle]
+    }
+  rescue GoatService::NetworkError => e
+    Rails.logger.error("Failed to resolve handle #{handle}: #{e.message}")
+    render json: { error: "Could not resolve handle. Please check that the handle is correct." }, status: :not_found
+  rescue AuthenticationError => e
+    Rails.logger.error("Authentication failed for handle #{handle}: #{e.message}")
+    render json: { error: "Authentication failed. Please check your password." }, status: :unauthorized
+  rescue StandardError => e
+    Rails.logger.error("Unexpected error during handle lookup: #{e.message}")
+    render json: { error: "An unexpected error occurred: #{e.message}" }, status: :internal_server_error
+  end
+
   # POST /migrations
   # Create a new migration and redirect to the status page
   #
@@ -109,11 +258,15 @@ class MigrationsController < ApplicationController
         end
       end
 
-      # Set the password and expiration (Lockbox encrypts automatically)
-      if params[:migration][:password].present?
-        @migration.password = params[:migration][:password]
-        @migration.credentials_expires_at = 48.hours.from_now
-      end
+      # Generate a secure random password for the new account
+      # This will be emailed to the user along with backup information
+      new_account_password = SecureRandom.urlsafe_base64(16) # ~128 bits of entropy
+      @migration.password = new_account_password
+      @migration.credentials_expires_at = 48.hours.from_now
+
+      # Store the password temporarily to email it (will be cleared after migration completes)
+      @migration.progress_data ||= {}
+      @migration.progress_data['new_account_password'] = new_account_password
 
       # Set the invite code if provided and enabled (Lockbox encrypts automatically)
       if EuroskyConfig.invite_code_enabled? && params[:migration][:invite_code].present?
@@ -123,8 +276,18 @@ class MigrationsController < ApplicationController
 
       if @migration.save
         # Migration saved successfully, token generated, CreateAccountJob scheduled
+
+        # Send email with new account password
+        begin
+          MigrationMailer.account_password(@migration, new_account_password).deliver_later
+          Rails.logger.info("[MigrationsController] Sent account password email to #{@migration.email}")
+        rescue => email_error
+          Rails.logger.error("[MigrationsController] Failed to send password email: #{email_error.message}")
+          # Don't fail the migration if email fails, just log it
+        end
+
         redirect_to migration_by_token_path(@migration.token),
-                    notice: "Migration started! Track your progress with token: #{@migration.token}"
+                    notice: "Migration started! Check your email for your new account password. Track your progress with token: #{@migration.token}"
       else
         render :new, status: :unprocessable_entity
       end
@@ -398,6 +561,19 @@ class MigrationsController < ApplicationController
     handle.gsub(/[\u200B-\u200F\u202A-\u202E\uFEFF]/, '').strip
   end
 
+  # Normalize PDS host URL (ensure https:// prefix)
+  def normalize_pds_host(host)
+    return nil if host.nil?
+
+    host = host.strip
+    # Add https:// if no protocol is specified
+    host = "https://#{host}" unless host.start_with?('http://', 'https://')
+    # Remove trailing slash
+    host = host.chomp('/')
+
+    host
+  end
+
   # Determine which status to retry from based on current failed status
   # Returns the status to set when retrying
   def determine_retry_status(current_status)
@@ -497,6 +673,54 @@ class MigrationsController < ApplicationController
   rescue JSON::ParserError, HTTParty::Error, StandardError => e
     Rails.logger.error("Failed to check account existence: #{e.message}")
     raise "Unable to verify account existence: #{e.message}"
+  end
+
+  # Custom error class for authentication failures
+  class AuthenticationError < StandardError; end
+
+  # Authenticate and fetch profile with email
+  # Requires valid credentials to access private account information
+  def authenticate_and_fetch_profile(pds_host, identifier, password)
+    # Create session to authenticate
+    session_url = "#{pds_host}/xrpc/com.atproto.server.createSession"
+
+    response = HTTParty.post(
+      session_url,
+      headers: { 'Content-Type' => 'application/json' },
+      body: {
+        identifier: identifier,
+        password: password
+      }.to_json,
+      timeout: 30
+    )
+
+    unless response.success?
+      error_body = JSON.parse(response.body) rescue {}
+      error_message = error_body['message'] || error_body['error'] || 'Authentication failed'
+      raise AuthenticationError, error_message
+    end
+
+    session_data = JSON.parse(response.body)
+    access_token = session_data['accessJwt']
+
+    # Now fetch the account details using authenticated session
+    # Use com.atproto.server.getAccountInviteCodes or com.atproto.server.describeServer
+    # Actually, the email should be in the session response
+    email = session_data['email']
+    handle = session_data['handle']
+
+    Rails.logger.info("Successfully authenticated #{identifier}, email: #{email.present? ? 'present' : 'not available'}")
+
+    {
+      handle: handle,
+      email: email
+    }
+  rescue JSON::ParserError => e
+    Rails.logger.error("Failed to parse authentication response: #{e.message}")
+    raise AuthenticationError, "Invalid response from server"
+  rescue HTTParty::Error => e
+    Rails.logger.error("Network error during authentication: #{e.message}")
+    raise AuthenticationError, "Network error: #{e.message}"
   end
 
   # Set security headers to prevent indexing and caching of sensitive migration data

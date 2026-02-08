@@ -8,6 +8,11 @@ Rails.application.routes.draw do
 
   # Migrations resource routes
   resources :migrations, only: [:new, :create, :show] do
+    collection do
+      post :lookup_handle
+      post :check_pds
+      post :check_handle
+    end
     member do
       post :submit_plc_token
       get :status

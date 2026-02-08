@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_02_02_100222) do
+ActiveRecord::Schema[7.1].define(version: 2026_02_08_013000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -46,7 +46,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_02_02_100222) do
     t.string "migration_type", default: "migration_out", null: false
     t.index ["backup_expires_at"], name: "index_migrations_on_backup_expires_at"
     t.index ["created_at"], name: "index_migrations_on_created_at"
-    t.index ["did"], name: "index_migrations_on_did", unique: true
+    t.index ["did"], name: "index_migrations_on_did"
     t.index ["invite_code_expires_at"], name: "index_migrations_on_invite_code_expires_at"
     t.index ["migration_type"], name: "index_migrations_on_migration_type"
     t.index ["status"], name: "index_migrations_on_status"

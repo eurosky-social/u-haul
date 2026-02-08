@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="googlebot" content="noindex, nofollow, noarchive">
+  <title><%= EuroskyConfig::SITE_NAME %> - Start Account Migration</title>
+  <% if EuroskyConfig::FAVICON_URL.present? %>
+    <link rel="icon" type="image/png" href="<%= EuroskyConfig::FAVICON_URL %>">
+  <% end %>
+  <%= render 'shared/styles' %>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const form = document.querySelector('form');
+
+      // Field definitions with validation rules
+      const fields = {
+        email: {
+          element: document.getElementById('migration_email'),
+          errorElement: document.getElementById('email-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'Email address is required';
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(value)) return 'Please enter a valid email address';
+            return null;
+          }
+        },
+        old_handle: {
+          element: document.getElementById('migration_old_handle'),
+          errorElement: document.getElementById('old-handle-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'Old handle is required';
+            if (!value.includes('.')) return 'Handle must include a domain (e.g., user.bsky.social)';
+            return null;
+          }
+        },
+        password: {
+          element: document.getElementById('migration_password'),
+          errorElement: document.getElementById('password-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'Password is required';
+            if (value.length < 8) return 'Password must be at least 8 characters';
+            return null;
+          }
+        },
+        <% if EuroskyConfig.invite_code_enabled? %>
+        invite_code: {
+          element: document.getElementById('migration_invite_code'),
+          errorElement: document.getElementById('invite-code-error'),
+          validate: function(value) {
+            <% if EuroskyConfig.invite_code_required? %>
+            if (!value || value.trim() === '') return 'Invite code is required';
+            <% end %>
+            // Basic format validation (alphanumeric + hyphens)
+            if (value && !/^[a-zA-Z0-9-]+$/.test(value)) {
+              return 'Invite code can only contain letters, numbers, and hyphens';
+            }
+            return null;
+          }
+        },
+        <% end %>
+        new_pds_host: {
+          element: document.getElementById('migration_new_pds_host'),
+          errorElement: document.getElementById('new-pds-host-error'),
+          validate: function(value) {
+            <% if EuroskyConfig.bound_mode? %>
+            // In bound mode, field is read-only and always valid
+            return null;
+            <% else %>
+            if (!value || value.trim() === '') return 'New PDS host is required';
+            // Accept both with and without https://
+            const urlRegex = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
+            if (!urlRegex.test(value)) return 'Please enter a valid PDS host (e.g., pds.example.com)';
+            return null;
+            <% end %>
+          }
+        },
+        new_handle: {
+          element: document.getElementById('migration_new_handle'),
+          errorElement: document.getElementById('new-handle-error'),
+          validate: function(value) {
+            if (!value || value.trim() === '') return 'New handle is required';
+            if (!value.includes('.')) return 'Handle must include a domain (e.g., user.eurosky.social)';
+            return null;
+          }
+        }
+      };
+
+      // Validate a single field
+      function validateField(fieldName) {
+        const field = fields[fieldName];
+        if (!field || !field.element) return true;
+
+        const value = field.element.value;
+        const error = field.validate(value);
+
+        if (error) {
+          field.element.classList.add('field-error');
+          if (field.errorElement) {
+            field.errorElement.textContent = error;
+            field.errorElement.classList.add('visible');
+          }
+          return false;
+        } else {
+          field.element.classList.remove('field-error');
+          if (field.errorElement) {
+            field.errorElement.classList.remove('visible');
+          }
+          return true;
+        }
+      }
+
+      // Validate all fields
+      function validateAllFields() {
+        let isValid = true;
+        Object.keys(fields).forEach(function(fieldName) {
+          if (!validateField(fieldName)) {
+            isValid = false;
+          }
+        });
+        return isValid;
+      }
+
+      // Add real-time validation on blur
+      Object.keys(fields).forEach(function(fieldName) {
+        const field = fields[fieldName];
+        if (field.element) {
+          field.element.addEventListener('blur', function() {
+            validateField(fieldName);
+          });
+
+          // Clear error on input
+          field.element.addEventListener('input', function() {
+            if (field.element.classList.contains('field-error')) {
+              validateField(fieldName);
+            }
+          });
+        }
+      });
+
+      // Form submission with validation
+      form.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        // Validate all fields first
+        if (!validateAllFields()) {
+          // Scroll to first error
+          const firstError = document.querySelector('.field-error');
+          if (firstError) {
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstError.focus();
+          }
+          return false;
+        }
+
+        // Show confirmation dialog only if validation passes
+        const confirmed = confirm('Are you ready to start the migration? This process will begin immediately and cannot be stopped once started.');
+
+        if (confirmed) {
+          form.submit();
+        }
+      });
+    });
+  </script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <% if EuroskyConfig::LOGO_URL.present? %>
+        <img src="<%= EuroskyConfig::LOGO_URL %>" alt="<%= EuroskyConfig::SITE_NAME %>" class="header-logo">
+      <% end %>
+      <h1><%= EuroskyConfig::SITE_NAME %></h1>
+      <p><%= EuroskyConfig::SITE_SUBTITLE %></p>
+    </div>
+
+    <div class="content">
+      <% if @migration&.errors&.any? %>
+        <div class="error-messages" role="alert">
+          <h3>Please correct the following errors:</h3>
+          <ul>
+            <% @migration.errors.full_messages.each do |message| %>
+              <li><%= message %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <div class="warning-box" role="alert">
+        <h3>Important Information</h3>
+        <ul>
+          <li>This migration will take approximately 20-30 minutes</li>
+          <li>Your account will be temporarily unavailable during migration</li>
+          <li>You must have access to your old account's password</li>
+          <li>You will need a PLC operation token from <a href="https://plc.directory" target="_blank" rel="noopener">plc.directory</a></li>
+          <li>Make sure your new PDS is ready to accept your account</li>
+        </ul>
+        <h4>Returning to Bluesky?</h4>
+        <p>If you're migrating back to <strong>bsky.social</strong> from another PDS, this tool will automatically detect that and log you into your existing Bluesky account instead of creating a new one. Just enter <code>bsky.social</code> as your new PDS host.</p>
+        <p style="margin-top: 8px;"><strong>Important:</strong> You can ONLY migrate back to Bluesky if you previously had a <code>bsky.social</code> account. The tool will verify that your account exists on Bluesky before starting the migration. If you've never had a Bluesky account, you cannot migrate to it - Bluesky does not accept new accounts via migration.</p>
+      </div>
+
+      <%= form_with model: @migration, url: migrations_path, local: true, html: { novalidate: true } do |f| %>
+        <div class="form-group">
+          <%= f.label :email, "Email Address" %>
+          <%= f.email_field :email, id: "migration_email", placeholder: "you@example.com", autocomplete: "email" %>
+          <div class="helper-text">We'll send migration status updates to this email</div>
+          <div id="email-error" class="error-message"></div>
+        </div>
+
+        <div class="form-group">
+          <%= f.label :old_handle, "Old Handle" %>
+          <%= f.text_field :old_handle, id: "migration_old_handle", placeholder: "yourhandle.bsky.social", autocomplete: "username" %>
+          <div class="helper-text">Your current AT Protocol handle (we'll automatically find your PDS)</div>
+          <div id="old-handle-error" class="error-message"></div>
+        </div>
+
+        <div class="form-group">
+          <%= f.label :password, "Account Password" %>
+          <%= f.password_field :password, id: "migration_password", autocomplete: "current-password" %>
+          <div class="helper-text">Your current account password for authentication</div>
+          <div id="password-error" class="error-message"></div>
+        </div>
+
+        <% if EuroskyConfig.invite_code_enabled? %>
+          <div class="form-group">
+            <%= f.label :invite_code, "Invite Code#{' (required)' if EuroskyConfig.invite_code_required?}".html_safe %>
+            <%= f.text_field :invite_code,
+                             id: "migration_invite_code",
+                             placeholder: "Enter your invite code",
+                             autocomplete: "off",
+                             required: EuroskyConfig.invite_code_required? %>
+            <div class="helper-text">
+              <% if EuroskyConfig.invite_code_required? %>
+                An invite code is required to create an account on this PDS
+              <% else %>
+                Optional invite code if your target PDS requires one
+              <% end %>
+            </div>
+            <div id="invite-code-error" class="error-message"></div>
+          </div>
+        <% end %>
+
+        <div class="form-group">
+          <%= f.label :new_pds_host, "New PDS Host" %>
+          <% if EuroskyConfig.bound_mode? %>
+            <%= f.text_field :new_pds_host,
+                             id: "migration_new_pds_host",
+                             value: EuroskyConfig::TARGET_PDS_HOST,
+                             readonly: true,
+                             class: "readonly-field" %>
+            <div class="helper-text">This migration service is configured for <%= EuroskyConfig::TARGET_PDS_HOST %></div>
+          <% else %>
+            <%= f.text_field :new_pds_host,
+                             id: "migration_new_pds_host",
+                             placeholder: "pds.eurosky.social or https://pds.newhost.com",
+                             autocomplete: "url" %>
+            <div class="helper-text">The hostname of your destination PDS (with or without https://)</div>
+            <div id="new-pds-host-error" class="error-message"></div>
+          <% end %>
+        </div>
+
+        <div class="form-group">
+          <%= f.label :new_handle, "New Handle" %>
+          <%= f.text_field :new_handle, id: "migration_new_handle", placeholder: "yourhandle.eurosky.social", autocomplete: "username" %>
+          <div class="helper-text">Your new AT Protocol handle on the destination PDS</div>
+          <div id="new-handle-error" class="error-message"></div>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <%= f.check_box :create_backup_bundle, id: "migration_create_backup_bundle", checked: true %>
+            <span>Create backup bundle before migration</span>
+          </label>
+          <div class="helper-text">
+            Recommended: Download a complete backup of your account data (posts + media) before migration.
+            The backup will be available for 24 hours. If disabled, migration will start immediately.
+          </div>
+        </div>
+
+        <div class="security-note" role="note">
+          <h3>Security & Privacy</h3>
+          <p>
+            Your password is encrypted and stored securely for 48 hours, then automatically deleted.
+            It is only used to authenticate with your old PDS during migration.
+            We never store or transmit your password in plaintext.
+          </p>
+        </div>
+
+        <%= f.submit "Start Migration", class: "submit-button" %>
+      <% end %>
+    </div>
+  </div>
+</body>
+</html>
