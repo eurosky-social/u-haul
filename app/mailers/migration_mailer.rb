@@ -73,4 +73,31 @@ class MigrationMailer < ApplicationMailer
       subject: "Verify your email to start migration (#{migration.token})"
     )
   end
+
+  def critical_plc_failure(migration)
+    @migration = migration
+    @migration_url = migration_by_token_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))
+    @error_message = migration.last_error
+    @rotation_key = migration.rotation_key
+    @support_email = ENV.fetch('SUPPORT_EMAIL', 'support@example.com')
+
+    mail(
+      to: migration.email,
+      subject: "🚨 URGENT: Critical Migration Failure - DO NOT START NEW MIGRATION (#{migration.token})",
+      priority: 1 # High priority
+    )
+  end
+
+  def failed_blobs_retry_complete(migration, successful_count, failed_count)
+    @migration = migration
+    @migration_url = migration_by_token_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))
+    @successful_count = successful_count
+    @failed_count = failed_count
+    @can_retry_again = failed_count > 0
+
+    mail(
+      to: migration.email,
+      subject: "Blob Retry Complete: #{successful_count} succeeded, #{failed_count} still failed (#{migration.token})"
+    )
+  end
 end

@@ -1,0 +1,84 @@
+🚨 CRITICAL MIGRATION FAILURE - URGENT ACTION REQUIRED 🚨
+==============================================================
+
+Your AT Protocol account migration has encountered a CRITICAL ERROR
+during the PLC directory update (Point of No Return).
+
+⚠️ YOUR ACCOUNT MAY BE IN AN UNCERTAIN STATE ⚠️
+
+
+🚨 IMPORTANT - DO NOT:
+=======================
+
+❌ Start a new migration
+❌ Delete this email
+❌ Attempt manual recovery without support
+❌ Change your account settings on either PDS
+
+Your account data is safe, but the PLC directory state needs to be
+verified by our support team before you take any action.
+
+
+WHAT TO DO RIGHT NOW:
+=====================
+
+1. Save this email - You will need the information below
+
+2. Save your migration token:
+   <%= @migration.token %>
+
+<% if @rotation_key.present? %>
+3. Save your rotation key (account recovery mechanism):
+   <%= @rotation_key %>
+
+   ⚠️ This is your only way to revert PLC changes if needed!
+   Store it in a secure location (password manager, encrypted file)
+<% end %>
+
+4. Contact support IMMEDIATELY:
+   <%= @support_email %>
+
+5. Include this migration token in your support request:
+   <%= @migration.token %>
+
+
+WHAT HAPPENED?
+==============
+
+The migration failed during the PLC directory update, which is the
+critical step that redirects your DID to the new PDS.
+
+Error Details:
+--------------
+<%= @error_message %>
+
+Migration Information:
+----------------------
+Token: <%= @migration.token %>
+DID: <%= @migration.did %>
+Old PDS: <%= @migration.old_pds_host %>
+New PDS: <%= @migration.new_pds_host %>
+
+
+WHAT HAPPENS NEXT?
+==================
+
+Our support team will:
+
+• Investigate the PLC directory state for your DID
+• Determine whether the PLC operation succeeded or failed
+• Provide you with specific recovery instructions
+• Contact you within 24 hours via email
+
+DO NOT TAKE ANY ACTION until you hear from support.
+We will guide you through the recovery process.
+
+
+View your migration status:
+<%= @migration_url %>
+
+
+---
+This is an automated critical alert from <%= EuroskyConfig::SITE_NAME %>
+Support: <%= @support_email %>
+Migration Token: <%= @migration.token %>

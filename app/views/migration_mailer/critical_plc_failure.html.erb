@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content='text/html; charset=UTF-8' http-equiv='Content-Type' />
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: white; padding: 30px; border: 2px solid #dc2626; border-top: none; border-radius: 0 0 8px 8px; }
+    .critical-warning { background: #fee2e2; border-left: 4px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 4px; }
+    .do-not { background: #fef2f2; border: 2px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 8px; }
+    .code { background: #f3f4f6; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 14px; overflow-wrap: break-word; margin: 10px 0; }
+    .action-steps { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; margin: 20px 0; border-radius: 4px; }
+    .button { display: inline-block; padding: 14px 28px; background: #dc2626; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 10px 0; }
+    h2 { color: #991b1b; margin-top: 0; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 10px; }
+    .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 style="margin: 0; font-size: 28px;">🚨 CRITICAL MIGRATION FAILURE</h1>
+    <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
+      Your AT Protocol account migration has encountered a critical error
+    </p>
+  </div>
+
+  <div class="content">
+    <div class="critical-warning">
+      <h2 style="margin-top: 0;">⚠️ CRITICAL: PLC Directory Update Failed</h2>
+      <p style="font-size: 16px; margin-bottom: 0;">
+        Your migration encountered a failure during the PLC directory update (Point of No Return).
+        <strong>Your account may be in an uncertain state.</strong>
+      </p>
+    </div>
+
+    <div class="do-not">
+      <h2 style="color: #dc2626; margin-top: 0;">🚨 IMPORTANT - DO NOT:</h2>
+      <ul style="color: #991b1b; font-weight: 600; font-size: 15px;">
+        <li>❌ Start a new migration</li>
+        <li>❌ Delete this email</li>
+        <li>❌ Attempt manual recovery without support</li>
+        <li>❌ Change your account settings on either PDS</li>
+      </ul>
+      <p style="color: #991b1b; font-size: 14px;">
+        Your account data is safe, but the PLC directory state needs to be verified by our support team before you take any action.
+      </p>
+    </div>
+
+    <div class="action-steps">
+      <h2 style="color: #92400e; margin-top: 0;">What To Do Right Now:</h2>
+      <ol style="font-size: 15px;">
+        <li><strong>Save this email</strong> - You will need the information below</li>
+        <li><strong>Save your migration token:</strong>
+          <div class="code"><%= @migration.token %></div>
+        </li>
+        <% if @rotation_key.present? %>
+        <li><strong>Save your rotation key</strong> (account recovery mechanism):
+          <div class="code" style="word-break: break-all;"><%= @rotation_key %></div>
+          <p style="font-size: 13px; color: #92400e; margin: 5px 0 0 0;">
+            This is your only way to revert PLC changes if needed. Store it securely!
+          </p>
+        </li>
+        <% end %>
+        <li><strong>Contact support IMMEDIATELY:</strong>
+          <div class="code"><%= @support_email %></div>
+        </li>
+        <li><strong>Reference your migration token</strong> in your support request:
+          <div class="code"><%= @migration.token %></div>
+        </li>
+      </ol>
+    </div>
+
+    <div style="background: #f3f4f6; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #6b7280;">
+      <h3 style="margin-top: 0; color: #374151;">What Happened?</h3>
+      <p style="font-size: 14px; color: #4b5563; margin-bottom: 10px;">
+        The migration failed during the PLC directory update, which is the critical step that redirects your DID to the new PDS.
+      </p>
+      <p style="font-size: 14px; color: #4b5563; margin-bottom: 10px;">
+        <strong>Error Details:</strong>
+      </p>
+      <div class="code" style="background: white; color: #dc2626; font-size: 13px;">
+        <%= @error_message %>
+      </div>
+    </div>
+
+    <div style="background: #dbeafe; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #3b82f6;">
+      <h3 style="margin-top: 0; color: #1e40af;">What Happens Next?</h3>
+      <p style="font-size: 14px; color: #1e3a8a;">
+        Our support team will:
+      </p>
+      <ul style="color: #1e3a8a; font-size: 14px;">
+        <li>Investigate the PLC directory state for your DID</li>
+        <li>Determine whether the PLC operation succeeded or failed</li>
+        <li>Provide you with specific recovery instructions</li>
+        <li>Contact you within 24 hours via email</li>
+      </ul>
+      <p style="font-size: 14px; color: #1e3a8a; margin-bottom: 0;">
+        <strong>Do not take any action</strong> until you hear from support. We will guide you through the recovery process.
+      </p>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="<%= @migration_url %>" class="button">
+        View Migration Status
+      </a>
+    </div>
+
+    <div style="background: #fef9c3; padding: 15px; margin: 20px 0; border-radius: 6px; border-left: 4px solid #eab308;">
+      <p style="font-size: 13px; color: #854d0e; margin: 0;">
+        <strong>Migration Details:</strong><br>
+        Token: <%= @migration.token %><br>
+        DID: <%= @migration.did %><br>
+        Old PDS: <%= @migration.old_pds_host %><br>
+        New PDS: <%= @migration.new_pds_host %>
+      </p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>This is an automated critical alert from <%= EuroskyConfig::SITE_NAME %></p>
+    <p>Support Email: <%= @support_email %></p>
+    <p>Migration Token: <%= @migration.token %></p>
+  </div>
+</body>
+</html>

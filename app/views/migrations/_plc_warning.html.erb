@@ -1,0 +1,129 @@
+<%# Enhanced PLC Stage Warning - Point of No Return %>
+
+<div class="plc-danger-zone" style="margin-bottom: 32px;">
+  <%# CRITICAL WARNING BANNER %>
+  <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white; padding: 24px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(220, 38, 38, 0.3);">
+    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+      <span style="font-size: 48px;">🚨</span>
+      <div>
+        <h2 style="margin: 0; font-size: 28px; font-weight: 800;">POINT OF NO RETURN</h2>
+        <p style="margin: 8px 0 0 0; font-size: 16px; opacity: 0.95;">
+          The next action will permanently redirect your DID to the new PDS
+        </p>
+      </div>
+    </div>
+
+    <div style="background: rgba(255, 255, 255, 0.15); padding: 16px; border-radius: 6px; border-left: 4px solid rgba(255, 255, 255, 0.5);">
+      <p style="margin: 0; font-size: 15px; line-height: 1.6;">
+        <strong>Once you submit the PLC token:</strong><br>
+        • Your DID (<code style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 3px;"><%= @migration.did %></code>) will point to <%= @migration.new_pds_host %><br>
+        • All AT Protocol apps will resolve your identity to the new PDS<br>
+        • This change is immediate and affects the entire federated network<br>
+        • <strong>This action CANNOT be undone</strong> without your rotation key
+      </p>
+    </div>
+  </div>
+
+  <%# WHAT YOU NEED SECTION %>
+  <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+    <h3 style="color: #92400e; margin: 0 0 12px 0; font-size: 18px;">
+      📋 What You Need Before Proceeding:
+    </h3>
+    <ul style="color: #92400e; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
+      <li><strong>Your rotation key saved securely</strong> (scroll up to copy it)</li>
+      <li><strong>Verified all your data migrated</strong> (repository, blobs, preferences)</li>
+      <li><strong>The PLC operation token</strong> (you'll request this from plc.directory)</li>
+      <li><strong>Verification code</strong> (sent to your email)</li>
+      <li><strong>Understanding this is irreversible</strong> without the rotation key</li>
+    </ul>
+  </div>
+
+  <%# INSTRUCTIONS %>
+  <div style="background: white; border: 2px solid #e5e7eb; padding: 24px; border-radius: 8px; margin-bottom: 20px;">
+    <h3 style="color: #1f2937; margin: 0 0 16px 0; font-size: 18px;">
+      Step-by-Step Instructions:
+    </h3>
+
+    <div style="margin-bottom: 20px;">
+      <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 16px;">
+        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">1</div>
+        <div style="flex: 1;">
+          <strong style="color: #1f2937; font-size: 15px;">Save Your Rotation Key</strong>
+          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 0 0;">
+            Scroll up and copy your rotation key to a secure location (password manager, encrypted file).
+            This is your ONLY way to recover if something goes wrong.
+          </p>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 16px;">
+        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">2</div>
+        <div style="flex: 1;">
+          <strong style="color: #1f2937; font-size: 15px;">Visit PLC Directory</strong>
+          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 8px 0;">
+            Go to <a href="https://plc.directory" target="_blank" rel="noopener" style="color: #3b82f6; text-decoration: none; font-weight: 600;">plc.directory</a> in a new tab
+          </p>
+          <a href="https://plc.directory" target="_blank" rel="noopener" style="display: inline-block; padding: 8px 16px; background: #3b82f6; color: white; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600;">
+            Open PLC Directory →
+          </a>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 16px;">
+        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">3</div>
+        <div style="flex: 1;">
+          <strong style="color: #1f2937; font-size: 15px;">Enter Your DID</strong>
+          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 8px 0;">
+            Copy and paste your DID into the PLC directory:
+          </p>
+          <div style="background: #f3f4f6; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <code id="did-display" style="overflow-wrap: break-word; word-break: break-all;"><%= @migration.did %></code>
+            <button onclick="navigator.clipboard.writeText('<%= @migration.did %>'); this.textContent='✅'; setTimeout(() => this.textContent='📋', 2000)"
+                    style="padding: 6px 12px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; flex-shrink: 0;">
+              📋
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 16px;">
+        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">4</div>
+        <div style="flex: 1;">
+          <strong style="color: #1f2937; font-size: 15px;">Request PLC Operation Token</strong>
+          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 0 0;">
+            Click "Request a PLC operation token" on plc.directory and check your email for the token.
+          </p>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: start; gap: 12px;">
+        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">5</div>
+        <div style="flex: 1;">
+          <strong style="color: #1f2937; font-size: 15px;">Submit Below</strong>
+          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 0 0;">
+            Enter both the PLC token and the verification code from your email, then submit.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%# FINAL WARNING BEFORE FORM %>
+  <div style="background: #fee2e2; border: 2px solid #dc2626; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+      <span style="font-size: 32px;">⚠️</span>
+      <h3 style="color: #991b1b; margin: 0; font-size: 18px; font-weight: 700;">
+        Final Warning: Are You Ready?
+      </h3>
+    </div>
+    <ul style="color: #991b1b; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
+      <li>Have you saved your rotation key in a secure location?</li>
+      <li>Do you understand this change is permanent and affects the entire AT Protocol network?</li>
+      <li>Are you prepared to lose access if you don't have your rotation key?</li>
+      <li>Have you verified all your data (posts, media, preferences) migrated successfully?</li>
+    </ul>
+    <p style="color: #991b1b; font-size: 14px; margin: 12px 0 0 0; font-weight: 600;">
+      If you answered NO to any of these questions, DO NOT proceed yet.
+    </p>
+  </div>
+</div>

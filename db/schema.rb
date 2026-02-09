@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_02_08_013000) do
+ActiveRecord::Schema[7.1].define(version: 2026_02_09_000002) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -44,9 +44,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_02_08_013000) do
     t.integer "current_job_attempt", default: 0
     t.integer "current_job_max_attempts", default: 3
     t.string "migration_type", default: "migration_out", null: false
+    t.text "encrypted_plc_otp"
+    t.datetime "plc_otp_expires_at"
+    t.integer "plc_otp_attempts", default: 0
+    t.string "email_verification_token"
+    t.datetime "email_verified_at"
     t.index ["backup_expires_at"], name: "index_migrations_on_backup_expires_at"
     t.index ["created_at"], name: "index_migrations_on_created_at"
     t.index ["did"], name: "index_migrations_on_did"
+    t.index ["email_verification_token"], name: "index_migrations_on_email_verification_token", unique: true
     t.index ["invite_code_expires_at"], name: "index_migrations_on_invite_code_expires_at"
     t.index ["migration_type"], name: "index_migrations_on_migration_type"
     t.index ["status"], name: "index_migrations_on_status"

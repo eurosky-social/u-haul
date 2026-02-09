@@ -1,0 +1,229 @@
+<%# Error Details Partial - Enhanced user-friendly error display
+  Renders detailed error information with actionable guidance
+
+  Usage:
+    <%= render 'migrations/error_details', migration: @migration %>
+%>
+
+<% if @migration.last_error.present? %>
+  <% error_context = MigrationErrorHelper.explain_error(@migration) %>
+
+  <% if error_context %>
+    <div class="error-details-section" style="margin-bottom: 32px;">
+      <%# Error Header %>
+      <div class="error-header" style="background: <%= error_context[:severity] == :critical ? '#fee2e2' : error_context[:severity] == :error ? '#fef3c7' : '#fef9c3' %>; border-left: 4px solid <%= error_context[:severity] == :critical ? '#dc2626' : error_context[:severity] == :error ? '#f59e0b' : '#eab308' %>; padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+        <h3 style="color: <%= error_context[:severity] == :critical ? '#991b1b' : error_context[:severity] == :error ? '#92400e' : '#854d0e' %>; font-size: 20px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 24px;"><%= error_context[:icon] %></span>
+          <%= error_context[:title] %>
+        </h3>
+
+        <%# Current Status %>
+        <div style="background: rgba(255,255,255,0.7); padding: 12px; border-radius: 6px; margin-bottom: 12px;">
+          <div style="font-size: 13px; font-weight: 600; color: <%= error_context[:severity] == :critical ? '#991b1b' : error_context[:severity] == :error ? '#92400e' : '#854d0e' %>; margin-bottom: 4px;">
+            Current Status:
+          </div>
+          <div style="font-size: 14px; color: #1f2937;">
+            <%= error_context[:current_status] %>
+          </div>
+
+          <%# Retry Information %>
+          <% if error_context[:retry_info] && error_context[:retry_info][:remaining] > 0 %>
+            <div style="margin-top: 8px; padding: 8px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
+              <div style="font-size: 13px; color: #1e40af;">
+                <strong>⏱️ Retry Attempt:</strong> <%= error_context[:retry_info][:attempt] %> / <%= error_context[:retry_info][:max_attempts] %>
+                <br>
+                <strong>Remaining Attempts:</strong> <%= error_context[:retry_info][:remaining] %>
+              </div>
+              <div id="retry-countdown" style="margin-top: 4px; font-size: 12px; color: #3b82f6;">
+                Next retry in <span id="countdown-timer">calculating...</span>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+      <%# Expandable Details %>
+      <details class="error-expandable" style="margin-bottom: 16px;">
+        <summary style="cursor: pointer; padding: 16px; background: #f3f4f6; border-radius: 6px; font-weight: 600; color: #374151; font-size: 15px; user-select: none;">
+          📋 What Happened & What To Do
+        </summary>
+
+        <div style="padding: 20px; background: white; border: 1px solid #e5e7eb; border-radius: 6px; margin-top: 8px;">
+          <%# What Happened %>
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: #1f2937; font-size: 16px; font-weight: 700; margin-bottom: 8px;">
+              What Happened:
+            </h4>
+            <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">
+              <%= error_context[:what_happened] %>
+            </p>
+          </div>
+
+          <%# What To Do %>
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: #1f2937; font-size: 16px; font-weight: 700; margin-bottom: 8px;">
+              What You Can Do:
+            </h4>
+            <ul style="list-style-type: disc; padding-left: 24px; color: #4b5563; font-size: 14px; line-height: 1.8;">
+              <% error_context[:what_to_do].each do |action| %>
+                <li style="margin-bottom: 6px;"><%= action %></li>
+              <% end %>
+            </ul>
+          </div>
+
+          <%# Action Buttons %>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <% if error_context[:show_retry_button] %>
+              <%= link_to "🔄 Retry Migration", retry_migration_by_token_path(@migration.token),
+                  method: :post,
+                  data: { confirm: "Retry this migration from the current stage?" },
+                  style: "padding: 10px 20px; background: linear-gradient(135deg, #{EuroskyConfig::PRIMARY_COLOR} 0%, #{EuroskyConfig::SECONDARY_COLOR} 100%); color: white; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;" %>
+            <% end %>
+
+            <% if error_context[:show_new_migration_button] %>
+              <%= link_to "➕ Start New Migration", new_migration_path,
+                  style: "padding: 10px 20px; background: #10b981; color: white; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;" %>
+            <% end %>
+
+            <% if error_context[:check_url] %>
+              <%= link_to "🔍 Check PDS Status", error_context[:check_url],
+                  target: "_blank",
+                  rel: "noopener noreferrer",
+                  style: "padding: 10px 20px; background: #6b7280; color: white; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;" %>
+            <% end %>
+
+            <% if error_context[:show_download_manifest] && @migration.progress_data&.dig('failed_blobs').present? %>
+              <%= link_to "📄 Download Failed Blobs Report", export_recovery_data_migration_by_token_path(@migration.token, format: :txt),
+                  style: "padding: 10px 20px; background: #f59e0b; color: white; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;" %>
+            <% end %>
+
+            <% if error_context[:help_link] %>
+              <%= link_to "📖 View Help Guide", error_context[:help_link],
+                  target: "_blank",
+                  style: "padding: 10px 20px; background: #3b82f6; color: white; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;" %>
+            <% end %>
+          </div>
+
+          <%# Special Sections %>
+          <% if error_context[:show_cleanup_instructions] %>
+            <div style="margin-top: 20px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
+              <h4 style="color: #92400e; font-size: 15px; font-weight: 700; margin-bottom: 8px;">
+                🛠️ Cleanup Instructions
+              </h4>
+              <p style="color: #92400e; font-size: 13px; margin-bottom: 8px;">
+                To clean up the orphaned account, run this command (requires server access):
+              </p>
+              <code style="display: block; background: rgba(255,255,255,0.8); padding: 12px; border-radius: 4px; font-family: monospace; font-size: 12px; overflow-wrap: break-word;">
+                cd scripts && ./cleanup_orphaned_account_db.sh <%= error_context[:did] %>
+              </code>
+              <p style="color: #92400e; font-size: 13px; margin-top: 8px;">
+                Or contact the target PDS administrator to manually delete the orphaned account.
+              </p>
+            </div>
+          <% end %>
+
+          <% if error_context[:show_rotation_key] && @migration.rotation_key.present? %>
+            <div style="margin-top: 20px; padding: 16px; background: #fee2e2; border-left: 4px solid #dc2626; border-radius: 6px;">
+              <h4 style="color: #991b1b; font-size: 15px; font-weight: 700; margin-bottom: 8px;">
+                🔑 Your Rotation Key (SAVE THIS)
+              </h4>
+              <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0; font-family: monospace; font-size: 11px; overflow-wrap: break-word; word-break: break-all;">
+                <%= @migration.rotation_key %>
+              </div>
+              <button onclick="navigator.clipboard.writeText('<%= @migration.rotation_key %>'); this.textContent='✅ Copied!'; setTimeout(() => this.textContent='📋 Copy Rotation Key', 2000)"
+                      style="padding: 8px 16px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                📋 Copy Rotation Key
+              </button>
+            </div>
+          <% end %>
+
+          <% if error_context[:show_contact_support] %>
+            <div style="margin-top: 20px; padding: 16px; background: #fee2e2; border-left: 4px solid #dc2626; border-radius: 6px;">
+              <h4 style="color: #991b1b; font-size: 15px; font-weight: 700; margin-bottom: 8px;">
+                🚨 Contact Support Immediately
+              </h4>
+              <p style="color: #991b1b; font-size: 14px; margin-bottom: 8px;">
+                <strong>Support Email:</strong> <%= error_context[:support_email] %><br>
+                <strong>Migration Token:</strong> <code style="background: rgba(255,255,255,0.8); padding: 2px 6px; border-radius: 3px;"><%= error_context[:migration_token] %></code>
+              </p>
+              <p style="color: #991b1b; font-size: 13px;">
+                Include your migration token in your support request for faster assistance.
+              </p>
+            </div>
+          <% end %>
+        </div>
+      </details>
+
+      <%# Technical Details (Collapsed by Default) %>
+      <details class="technical-details" style="margin-bottom: 16px;">
+        <summary style="cursor: pointer; padding: 12px; background: #f9fafb; border-radius: 6px; font-weight: 600; color: #6b7280; font-size: 14px; user-select: none;">
+          🔧 Technical Details (For Debugging)
+        </summary>
+
+        <div style="padding: 16px; background: #1f2937; border-radius: 6px; margin-top: 8px; color: #f3f4f6; font-family: monospace; font-size: 12px; overflow-x: auto;">
+          <div style="margin-bottom: 8px;">
+            <strong style="color: #9ca3af;">Error Message:</strong>
+          </div>
+          <div style="padding: 8px; background: rgba(0,0,0,0.3); border-radius: 4px; white-space: pre-wrap; word-break: break-word;">
+<%= error_context[:technical_details] %>
+          </div>
+
+          <% if error_context[:job_step] %>
+            <div style="margin-top: 12px;">
+              <strong style="color: #9ca3af;">Job Step:</strong> <%= error_context[:job_step] %>
+            </div>
+          <% end %>
+
+          <div style="margin-top: 12px;">
+            <strong style="color: #9ca3af;">Migration Status:</strong> <%= @migration.status %>
+          </div>
+
+          <div style="margin-top: 8px;">
+            <strong style="color: #9ca3af;">Migration Token:</strong> <%= @migration.token %>
+          </div>
+
+          <div style="margin-top: 8px;">
+            <strong style="color: #9ca3af;">DID:</strong> <%= @migration.did %>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <%# Auto-refresh countdown script %>
+    <script>
+      (function() {
+        // Estimated retry countdown (approximation based on exponential backoff)
+        const attempt = <%= error_context[:retry_info]&.dig(:attempt) || 0 %>;
+        const maxAttempts = <%= error_context[:retry_info]&.dig(:max_attempts) || 3 %>;
+
+        if (attempt > 0 && attempt < maxAttempts) {
+          // Exponential backoff estimate: 2^attempt seconds
+          let remainingSeconds = Math.pow(2, attempt);
+
+          const countdownEl = document.getElementById('countdown-timer');
+          if (countdownEl) {
+            const updateCountdown = () => {
+              if (remainingSeconds > 0) {
+                const minutes = Math.floor(remainingSeconds / 60);
+                const seconds = remainingSeconds % 60;
+
+                if (minutes > 0) {
+                  countdownEl.textContent = `${minutes}m ${seconds}s`;
+                } else {
+                  countdownEl.textContent = `${seconds}s`;
+                }
+
+                remainingSeconds--;
+                setTimeout(updateCountdown, 1000);
+              } else {
+                countdownEl.textContent = 'retrying now...';
+              }
+            };
+
+            updateCountdown();
+          }
+        }
+      })();
+    </script>
+  <% end %>
+<% end %>

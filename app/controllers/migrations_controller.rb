@@ -27,7 +27,7 @@
 #   GET  /migrations/:id/status (JSON only)
 
 class MigrationsController < ApplicationController
-  before_action :set_migration, only: [:show, :submit_plc_token, :status, :download_backup, :retry, :cancel]
+  before_action :set_migration, only: [:show, :submit_plc_token, :status, :download_backup, :retry, :cancel, :export_recovery_data, :retry_failed_blobs]
   before_action :set_security_headers
 
   # GET /migrations/new
@@ -570,6 +570,177 @@ class MigrationsController < ApplicationController
     Rails.logger.error("Failed to cancel migration #{@migration.token}: #{e.message}")
     redirect_to migration_by_token_path(@migration.token),
                 alert: "Failed to cancel migration: #{e.message}"
+  end
+
+  # POST /migrate/:token/retry_failed_blobs
+  # Retry only the blobs that failed during the initial transfer
+  #
+  # Requirements:
+  #   - Migration must have failed blobs in progress_data
+  #   - Migration should be completed or in pending_blobs state
+  #
+  # Response:
+  #   - Success: Redirects to status page with notice
+  #   - Failure: Redirects to status page with alert
+  def retry_failed_blobs
+    failed_blobs = @migration.progress_data&.dig('failed_blobs') || []
+
+    if failed_blobs.empty?
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "No failed blobs to retry"
+      return
+    end
+
+    # Enqueue job to retry just the failed blobs
+    RetryFailedBlobsJob.perform_later(@migration.id, failed_blobs)
+
+    Rails.logger.info("Retry failed blobs requested for migration #{@migration.token} (#{failed_blobs.length} blobs)")
+    redirect_to migration_by_token_path(@migration.token),
+                notice: "Retrying #{failed_blobs.length} failed blobs..."
+  rescue StandardError => e
+    Rails.logger.error("Failed to retry failed blobs for migration #{@migration.token}: #{e.message}")
+    redirect_to migration_by_token_path(@migration.token),
+                alert: "Failed to retry blobs: #{e.message}"
+  end
+
+  # GET /migrate/:token/export_recovery_data
+  # Export all migration data for recovery/debugging
+  #
+  # Formats:
+  #   - JSON: Complete migration data including progress, errors, metadata
+  #   - TXT: Failed blobs manifest (if applicable)
+  #
+  # Response:
+  #   - Success: Returns recovery data in requested format
+  #   - Failure: Returns 500 with error message
+  def export_recovery_data
+    respond_to do |format|
+      format.json do
+        recovery_data = {
+          migration_token: @migration.token,
+          did: @migration.did,
+          old_handle: @migration.old_handle,
+          new_handle: @migration.new_handle,
+          old_pds_host: @migration.old_pds_host,
+          new_pds_host: @migration.new_pds_host,
+          email: @migration.email,
+          status: @migration.status,
+          migration_type: @migration.migration_type,
+          created_at: @migration.created_at.iso8601,
+          updated_at: @migration.updated_at.iso8601,
+          progress_percentage: @migration.progress_percentage,
+          estimated_memory_mb: @migration.estimated_memory_mb,
+          progress_data: @migration.progress_data,
+          last_error: @migration.last_error,
+          retry_count: @migration.retry_count,
+          current_job_step: @migration.current_job_step,
+          current_job_attempt: @migration.current_job_attempt,
+          current_job_max_attempts: @migration.current_job_max_attempts,
+          failed_blobs: @migration.progress_data&.dig('failed_blobs') || [],
+          rotation_key_available: @migration.rotation_key.present?,
+          backup_available: @migration.backup_available?,
+          credentials_expired: @migration.credentials_expired?
+        }
+
+        # Add rotation key if available (SECURITY: Only in recovery data)
+        if @migration.rotation_key.present?
+          recovery_data[:rotation_key] = @migration.rotation_key
+          recovery_data[:rotation_key_warning] = "SAVE THIS SECURELY - This is your only account recovery mechanism"
+        end
+
+        render json: recovery_data, status: :ok
+      end
+
+      format.txt do
+        # Generate failed blobs manifest
+        failed_blobs = @migration.progress_data&.dig('failed_blobs') || []
+
+        manifest = <<~MANIFEST
+          MIGRATION RECOVERY DATA
+          =======================
+
+          Migration Token: #{@migration.token}
+          DID: #{@migration.did}
+          Status: #{@migration.status}
+          Date: #{Time.current.iso8601}
+
+          Old PDS: #{@migration.old_pds_host}
+          Old Handle: #{@migration.old_handle}
+
+          New PDS: #{@migration.new_pds_host}
+          New Handle: #{@migration.new_handle}
+
+          ---
+
+          FAILED BLOBS REPORT
+          ===================
+
+          Total Failed Blobs: #{failed_blobs.length}
+
+        MANIFEST
+
+        if failed_blobs.any?
+          manifest += "\nFailed Blob CIDs:\n"
+          failed_blobs.each_with_index do |cid, index|
+            manifest += "  #{index + 1}. #{cid}\n"
+          end
+
+          manifest += <<~FOOTER
+
+            ---
+
+            RECOVERY INSTRUCTIONS
+            =====================
+
+            These blobs were downloaded from the old PDS but failed to upload
+            to the new PDS due to network errors or timeouts.
+
+            To retry these blobs:
+            1. Use the "Retry Failed Blobs" button on the status page
+            2. Or manually upload using the goat CLI:
+               goat blob upload --pds-host #{@migration.new_pds_host} <blob-file>
+
+            For assistance, contact support with this migration token:
+            #{@migration.token}
+          FOOTER
+        else
+          manifest += "\nNo failed blobs - all blobs transferred successfully!\n"
+        end
+
+        # Add error information if present
+        if @migration.last_error.present?
+          manifest += <<~ERROR_INFO
+
+            ---
+
+            ERROR INFORMATION
+            =================
+
+            Last Error: #{@migration.last_error}
+            Job Step: #{@migration.current_job_step || 'Unknown'}
+            Retry Count: #{@migration.retry_count}
+
+          ERROR_INFO
+        end
+
+        send_data manifest,
+                  filename: "migration-recovery-#{@migration.token}.txt",
+                  type: 'text/plain',
+                  disposition: 'attachment'
+      end
+
+      format.all do
+        render plain: "Format not supported. Use .json or .txt", status: :not_acceptable
+      end
+    end
+  rescue StandardError => e
+    Rails.logger.error("Failed to export recovery data for migration #{@migration.token}: #{e.message}")
+
+    respond_to do |format|
+      format.json { render json: { error: "Failed to export recovery data: #{e.message}" }, status: :internal_server_error }
+      format.txt { render plain: "Failed to export recovery data: #{e.message}", status: :internal_server_error }
+      format.all { render plain: "Failed to export recovery data: #{e.message}", status: :internal_server_error }
+    end
   end
 
   private

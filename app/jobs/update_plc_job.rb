@@ -141,14 +141,7 @@ class UpdatePlcJob < ApplicationJob
   private
 
   def alert_admin_of_critical_failure(migration, error)
-    # This is where you'd integrate with your alerting system
-    # Examples:
-    # - ActionMailer to send email to admins
-    # - Slack webhook
-    # - PagerDuty API
-    # - Sentry/Bugsnag error tracking
-    #
-    # For now, we'll just log prominently
+    # Log prominently for admin monitoring
     Rails.logger.error("=" * 80)
     Rails.logger.error("CRITICAL MIGRATION FAILURE - ADMIN ALERT")
     Rails.logger.error("Migration Token: #{migration.token}")
@@ -158,8 +151,17 @@ class UpdatePlcJob < ApplicationJob
     Rails.logger.error("Status: PLC update failed - requires manual recovery")
     Rails.logger.error("=" * 80)
 
-    # TODO: Implement actual alerting mechanism
+    # Send critical failure email to user
+    begin
+      MigrationMailer.critical_plc_failure(migration).deliver_later
+      Rails.logger.info("Sent critical failure notification to #{migration.email}")
+    rescue => email_error
+      Rails.logger.error("Failed to send critical failure email: #{email_error.message}")
+    end
+
+    # TODO: Add additional alerting mechanisms
     # AdminMailer.critical_migration_failure(migration, error).deliver_later
     # SlackNotifier.alert_critical_failure(migration, error)
+    # PagerDuty.trigger_incident(migration, error)
   end
 end
