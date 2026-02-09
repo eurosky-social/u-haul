@@ -1,0 +1,46 @@
+PLC VERIFICATION CODE
+Migration <%= @migration.token %>
+
+CRITICAL: Point of No Return
+============================
+
+Hello,
+
+Your migration is ready for the final, IRREVERSIBLE step. You're about to submit your PLC token to redirect your DID to the new PDS.
+
+YOUR VERIFICATION CODE:
+
+    <%= @otp %>
+
+Expires in: <%= @expires_in %>
+
+
+🚨 THIS IS THE POINT OF NO RETURN
+
+Once you submit this code along with your PLC token, your account will be permanently migrated to the new PDS.
+
+- Your DID will point to the new PDS immediately
+- You cannot undo this operation
+- Make sure your new account is ready before proceeding
+
+
+How to Use This Code:
+
+1. Go to your migration status page:
+   <%= @migration_url %>
+
+2. Enter your PLC token (from your old PDS email)
+
+3. Enter this verification code: <%= @otp %>
+
+4. Submit both to complete the migration
+
+Note: You have 5 attempts to enter the correct code. After that, you'll need to request a new one.
+
+
+---
+Migration Token: <%= @migration.token %>
+
+If you didn't request this code, someone may be attempting to access your migration.
+
+Eurosky Migration Service

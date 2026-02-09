@@ -135,7 +135,9 @@ class MigrationsController < ApplicationController
     render json: { error: "Invalid response from PDS" }, status: :internal_server_error
   rescue HTTParty::Error, StandardError => e
     Rails.logger.error("Failed to check PDS requirements: #{e.message}")
-    render json: { error: "Failed to connect to PDS: #{e.message}" }, status: :internal_server_error
+    Rails.logger.error(e.backtrace.join("\n")) if e.respond_to?(:backtrace)
+    error_message = Rails.env.production? ? "Failed to connect to PDS. Please check the URL." : "Failed to connect to PDS: #{e.message}"
+    render json: { error: error_message }, status: :internal_server_error
   end
 
   # POST /migrations/lookup_handle
@@ -194,7 +196,9 @@ class MigrationsController < ApplicationController
     render json: { error: "Authentication failed. Please check your password." }, status: :unauthorized
   rescue StandardError => e
     Rails.logger.error("Unexpected error during handle lookup: #{e.message}")
-    render json: { error: "An unexpected error occurred: #{e.message}" }, status: :internal_server_error
+    Rails.logger.error(e.backtrace.join("\n"))
+    error_message = Rails.env.production? ? "An unexpected error occurred. Please try again." : "An unexpected error occurred: #{e.message}"
+    render json: { error: error_message }, status: :internal_server_error
   end
 
   # POST /migrations
@@ -216,9 +220,11 @@ class MigrationsController < ApplicationController
     @migration = Migration.new(migration_params)
 
     begin
-      # Sanitize handles by removing invisible Unicode characters and trimming whitespace
-      @migration.old_handle = sanitize_handle(@migration.old_handle) if @migration.old_handle.present?
-      @migration.new_handle = sanitize_handle(@migration.new_handle) if @migration.new_handle.present?
+      # Sanitize ALL user inputs by removing invisible Unicode characters and trimming whitespace
+      @migration.old_handle = sanitize_user_input(@migration.old_handle) if @migration.old_handle.present?
+      @migration.new_handle = sanitize_user_input(@migration.new_handle) if @migration.new_handle.present?
+      @migration.email = sanitize_user_input(@migration.email) if @migration.email.present?
+      @migration.new_pds_host = sanitize_user_input(@migration.new_pds_host) if @migration.new_pds_host.present?
 
       # Resolve the old handle to get DID and PDS host
       if @migration.old_handle.present?
@@ -266,14 +272,14 @@ class MigrationsController < ApplicationController
       end
 
       # Generate a secure random password for the new account
-      # This will be emailed to the user along with backup information
+      # This will be emailed to the user (encrypted via Lockbox, NOT stored in progress_data)
       new_account_password = SecureRandom.urlsafe_base64(16) # ~128 bits of entropy
-      @migration.password = new_account_password
+      @migration.password = new_account_password  # Lockbox encrypts this
       @migration.credentials_expires_at = 48.hours.from_now
 
-      # Store the password temporarily to email it (will be cleared after migration completes)
+      # Track password generation time (for auditing), but NOT the password itself
       @migration.progress_data ||= {}
-      @migration.progress_data['new_account_password'] = new_account_password
+      @migration.progress_data['password_generated_at'] = Time.current.iso8601
 
       # Set the invite code if provided and enabled (Lockbox encrypts automatically)
       if EuroskyConfig.invite_code_enabled? && params[:migration][:invite_code].present?
@@ -309,6 +315,26 @@ class MigrationsController < ApplicationController
     end
   end
 
+  # GET /migrate/:token/verify/:verification_token
+  # Verify email address and start the migration
+  #
+  # Response:
+  #   - Success: Redirects to status page with notice, starts migration
+  #   - Failure: Redirects to status page with error
+  def verify_email
+    verification_token = params[:verification_token]
+
+    if @migration.verify_email!(verification_token)
+      Rails.logger.info("Email verified for migration #{@migration.token}, starting migration")
+      redirect_to migration_by_token_path(@migration.token),
+                  notice: "Email verified! Your migration has started."
+    else
+      Rails.logger.warn("Invalid email verification token for migration #{@migration.token}")
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "Invalid or expired verification link."
+    end
+  end
+
   # GET /migrations/:id
   # GET /migrate/:token
   # Display migration status page (HTML) or return JSON based on format
@@ -337,21 +363,41 @@ class MigrationsController < ApplicationController
   #
   # Params:
   #   - plc_token: The PLC operation token from the old PDS
+  #   - plc_otp: The one-time password sent via email for verification
   #
   # Response:
   #   - Success: Redirects to status page with success message
   #   - Failure: Redirects to status page with error message
   def submit_plc_token
     plc_token = params[:plc_token]
+    plc_otp = params[:plc_otp]
 
     if plc_token.blank?
+      Rails.logger.warn("PLC token submission failed for migration #{@migration.token}: Token blank")
       redirect_to migration_by_token_path(@migration.token),
                   alert: "PLC token cannot be blank"
       return
     end
 
+    if plc_otp.blank?
+      Rails.logger.warn("PLC token submission failed for migration #{@migration.token}: OTP blank")
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "Verification code (OTP) is required"
+      return
+    end
+
+    # Verify OTP with rate limiting
+    verification = @migration.verify_plc_otp(plc_otp)
+    unless verification[:valid]
+      Rails.logger.warn("PLC OTP verification failed for migration #{@migration.token}: #{verification[:error]}")
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "Verification failed: #{verification[:error]}"
+      return
+    end
+
     # Store the encrypted PLC token with expiration
     @migration.set_plc_token(plc_token)
+    Rails.logger.info("PLC token accepted for migration #{@migration.token} after successful OTP verification")
 
     # Trigger the critical UpdatePlcJob to update the PLC directory
     UpdatePlcJob.perform_later(@migration.id)
@@ -361,7 +407,7 @@ class MigrationsController < ApplicationController
   rescue StandardError => e
     Rails.logger.error("Failed to submit PLC token for migration #{@migration.token}: #{e.message}")
     redirect_to migration_by_token_path(@migration.token),
-                alert: "Failed to submit PLC token: #{e.message}"
+                alert: "Failed to submit PLC token. Please try again."
   end
 
   # GET /migrations/:id/status
@@ -420,6 +466,48 @@ class MigrationsController < ApplicationController
     render plain: "Failed to download backup: #{e.message}", status: :internal_server_error
   end
 
+  # POST /migrate/:token/resend_otp
+  # POST /migrations/:id/resend_plc_otp
+  # Resend the PLC OTP verification code
+  #
+  # Requirements:
+  #   - Migration must be in pending_plc status
+  #   - Rate limited to prevent abuse
+  #
+  # Response:
+  #   - Success: Redirects to status page with notice
+  #   - Failure: Redirects to status page with alert
+  def resend_plc_otp
+    unless @migration.status == 'pending_plc'
+      Rails.logger.warn("OTP resend request failed for migration #{@migration.token}: Not in pending_plc status")
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "OTP can only be resent when waiting for PLC token submission"
+      return
+    end
+
+    # Rate limiting: Check last OTP send time
+    last_sent = @migration.plc_otp_expires_at
+    if last_sent && last_sent > 13.minutes.ago
+      time_remaining = ((last_sent - 13.minutes.ago) / 60).ceil
+      Rails.logger.warn("OTP resend rate limited for migration #{@migration.token}: #{time_remaining} minutes remaining")
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "Please wait #{time_remaining} more minute(s) before requesting a new code"
+      return
+    end
+
+    # Generate and send new OTP
+    otp = @migration.generate_plc_otp!(expires_in: 15.minutes)
+    MigrationMailer.plc_otp(@migration, otp).deliver_later
+
+    Rails.logger.info("PLC OTP resent for migration #{@migration.token}")
+    redirect_to migration_by_token_path(@migration.token),
+                notice: "A new verification code has been sent to #{@migration.email}"
+  rescue StandardError => e
+    Rails.logger.error("Failed to resend PLC OTP for migration #{@migration.token}: #{e.message}")
+    redirect_to migration_by_token_path(@migration.token),
+                alert: "Failed to resend verification code. Please try again."
+  end
+
   # POST /migrate/:token/retry
   # Retry a failed migration from the current step
   #
@@ -453,7 +541,7 @@ class MigrationsController < ApplicationController
   rescue StandardError => e
     Rails.logger.error("Failed to retry migration #{@migration.token}: #{e.message}")
     redirect_to migration_by_token_path(@migration.token),
-                alert: "Failed to retry migration: #{e.message}"
+                alert: "Failed to retry migration. Please try again."
   end
 
   # POST /migrate/:token/cancel
@@ -552,10 +640,10 @@ class MigrationsController < ApplicationController
     }
   end
 
-  # Sanitize handle by removing invisible Unicode characters and trimming whitespace
-  # This prevents issues with copy-pasted handles that may contain RTL marks, zero-width spaces, etc.
-  def sanitize_handle(handle)
-    return nil if handle.nil?
+  # Sanitize user input by removing invisible Unicode characters and trimming whitespace
+  # This prevents issues with copy-pasted text that may contain RTL marks, zero-width spaces, etc.
+  def sanitize_user_input(input)
+    return nil if input.nil?
 
     # Remove common invisible Unicode characters:
     # - U+200B: Zero-width space
@@ -565,7 +653,13 @@ class MigrationsController < ApplicationController
     # - U+200F: Right-to-left mark
     # - U+202A-U+202E: Various directional formatting characters
     # - U+FEFF: Zero-width no-break space (BOM)
-    handle.gsub(/[\u200B-\u200F\u202A-\u202E\uFEFF]/, '').strip
+    # - U+00A0: Non-breaking space
+    input.gsub(/[\u200B-\u200F\u202A-\u202E\uFEFF\u00A0]/, '').strip
+  end
+
+  # Alias for backwards compatibility
+  def sanitize_handle(handle)
+    sanitize_user_input(handle)
   end
 
   # Normalize PDS host URL (ensure https:// prefix)

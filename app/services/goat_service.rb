@@ -717,20 +717,24 @@ class GoatService
     # Build full command
     cmd = ['goat'] + args
 
-    # Log command with password masking (unless DEBUG_PASSWORDS is set)
-    debug_cmd = if ENV['DEBUG_PASSWORDS'] == 'true'
+    # Log command with password and token masking
+    # NEVER log passwords/tokens in production, even with DEBUG_PASSWORDS
+    debug_cmd = if !Rails.env.production? && ENV['DEBUG_PASSWORDS'] == 'true'
       cmd.join(' ')
     else
-      # Mask the value after -p flag
+      # Mask passwords and tokens
       masked = []
       mask_next = false
       cmd.each do |arg|
         if mask_next
           masked << '[REDACTED]'
           mask_next = false
-        elsif arg == '-p' || arg == '--password'
+        elsif arg =~ /^(-p|--password|--token|--service-auth)$/
           masked << arg
           mask_next = true
+        elsif arg =~ /^(--password=|--token=|--service-auth=)(.+)$/
+          # Handle --flag=value format
+          masked << "#{$1}[REDACTED]"
         else
           masked << arg
         end
@@ -800,11 +804,24 @@ class GoatService
 
     url = "#{pds_host}/xrpc/com.atproto.server.createSession"
 
-    response = `curl -s -X POST "#{url}" \
-      -H "Content-Type: application/json" \
-      -d '{"identifier":"#{identifier}","password":"#{password}"}'`
+    response = HTTParty.post(
+      url,
+      headers: { 'Content-Type' => 'application/json' },
+      body: {
+        identifier: identifier,
+        password: password
+      }.to_json,
+      timeout: 30
+    )
 
-    parsed = JSON.parse(response)
+    unless response.success?
+      error_body = JSON.parse(response.body) rescue {}
+      error_msg = error_body['message'] || error_body['error'] || "HTTP #{response.code}"
+      logger.error("Failed to get access token: #{error_msg}")
+      raise AuthenticationError, "Failed to get access token: #{error_msg}"
+    end
+
+    parsed = JSON.parse(response.body)
 
     if parsed['accessJwt']
       logger.info("Access token obtained via API")
@@ -814,9 +831,11 @@ class GoatService
       raise AuthenticationError, "Failed to get access token: #{error_msg}"
     end
   rescue JSON::ParserError => e
-    raise AuthenticationError, "Invalid response from createSession: #{response}"
-  rescue StandardError => e
-    raise AuthenticationError, "Failed to call createSession API: #{e.message}"
+    logger.error("Failed to parse createSession response: #{e.message}")
+    raise AuthenticationError, "Invalid response from createSession"
+  rescue HTTParty::Error => e
+    logger.error("Network error during createSession: #{e.message}")
+    raise AuthenticationError, "Network error: #{e.message}"
   end
 
   def get_access_token_from_session(pds_host:, identifier:)

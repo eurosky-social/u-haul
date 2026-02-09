@@ -50,6 +50,7 @@ class Migration < ApplicationRecord
   has_encrypted :plc_token, key: lockbox_key, encrypted_attribute: :encrypted_plc_token
   has_encrypted :invite_code, key: lockbox_key, encrypted_attribute: :encrypted_invite_code
   has_encrypted :rotation_key, key: lockbox_key, encrypted_attribute: :rotation_private_key_ciphertext
+  has_encrypted :plc_otp, key: lockbox_key, encrypted_attribute: :encrypted_plc_otp
 
   # Prepend the expiration check module AFTER Lockbox has defined its methods
   prepend ExpirationChecks
@@ -64,7 +65,19 @@ class Migration < ApplicationRecord
   validates :email, presence: true, format: { with: URI::MailTo::EMAIL_REGEXP }
   validates :status, presence: true, inclusion: { in: statuses.keys }
   validates :old_pds_host, :new_pds_host, presence: true
-  validates :old_handle, :new_handle, presence: true
+
+  # ATProto handle validation (official spec from https://atproto.com/specs/handle)
+  # Format: Handles must be valid DNS hostnames with at least one dot
+  # Each label: 1-63 alphanumeric chars (can include hyphens, but not at start/end)
+  validates :old_handle, :new_handle, presence: true,
+    format: {
+      with: /\A([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\z/,
+      message: "must be a valid ATProto handle (e.g., user.bsky.social)"
+    },
+    length: { maximum: 253 }
+
+  # PDS host URL validation with SSRF protection
+  # validate :validate_pds_hosts
   validates :retry_count, numericality: { greater_than_or_equal_to: 0, only_integer: true }
   validates :estimated_memory_mb, numericality: { greater_than_or_equal_to: 0, only_integer: true }
 
@@ -73,8 +86,9 @@ class Migration < ApplicationRecord
 
   # Callbacks
   before_validation :generate_token, on: :create
+  before_validation :generate_email_verification_token, on: :create
   before_validation :normalize_hosts
-  after_create :schedule_first_job
+  after_create :send_email_verification
 
   # Scopes
   scope :active, -> { where.not(status: [:completed, :failed]) }
@@ -269,6 +283,46 @@ class Migration < ApplicationRecord
     save!
   end
 
+  # Generate and store OTP for PLC submission (6-digit code)
+  def generate_plc_otp!(expires_in: 15.minutes)
+    otp = SecureRandom.random_number(1_000_000).to_s.rjust(6, '0')
+    self.plc_otp = otp  # Lockbox handles encryption automatically
+    self.plc_otp_expires_at = expires_in.from_now
+    self.plc_otp_attempts ||= 0
+    save!
+    Rails.logger.info("Generated PLC OTP for migration #{token} (expires at #{plc_otp_expires_at})")
+    otp
+  end
+
+  # Verify PLC OTP with rate limiting (max 5 attempts)
+  def verify_plc_otp(submitted_otp)
+    # Check if OTP has expired
+    if plc_otp_expires_at.nil? || plc_otp_expires_at < Time.current
+      Rails.logger.warn("PLC OTP verification failed for migration #{token}: OTP expired")
+      return { valid: false, error: 'OTP has expired. Please request a new one.' }
+    end
+
+    # Check attempt limit
+    if plc_otp_attempts >= 5
+      Rails.logger.warn("PLC OTP verification failed for migration #{token}: Too many attempts")
+      return { valid: false, error: 'Too many failed attempts. Please request a new OTP.' }
+    end
+
+    # Increment attempts
+    increment!(:plc_otp_attempts)
+
+    # Verify OTP
+    if plc_otp == submitted_otp.to_s.strip
+      Rails.logger.info("PLC OTP verified successfully for migration #{token}")
+      # Clear OTP after successful verification
+      update!(encrypted_plc_otp: nil, plc_otp_expires_at: nil, plc_otp_attempts: 0)
+      return { valid: true }
+    else
+      Rails.logger.warn("PLC OTP verification failed for migration #{token}: Invalid code (attempt #{plc_otp_attempts}/5)")
+      return { valid: false, error: "Invalid OTP. #{5 - plc_otp_attempts} attempts remaining." }
+    end
+  end
+
   def credentials_expired?
     credentials_expires_at.nil? || credentials_expires_at < Time.current
   end
@@ -372,6 +426,36 @@ class Migration < ApplicationRecord
     end
   end
 
+  # Email verification token generation (32 characters = ~190 bits entropy)
+  def generate_email_verification_token
+    return if email_verification_token.present?
+
+    loop do
+      candidate = SecureRandom.urlsafe_base64(32)
+      self.email_verification_token = candidate
+      break unless Migration.exists?(email_verification_token: candidate)
+    end
+  end
+
+  # Verify email with token
+  def verify_email!(token)
+    if email_verification_token == token
+      update!(email_verified_at: Time.current, email_verification_token: nil)
+      Rails.logger.info("Email verified for migration #{self.token}")
+      # Now actually start the migration
+      schedule_first_job
+      true
+    else
+      Rails.logger.warn("Invalid email verification token for migration #{self.token}")
+      false
+    end
+  end
+
+  # Check if email is verified
+  def email_verified?
+    email_verified_at.present?
+  end
+
   # Normalize PDS hosts to include https:// prefix
   def normalize_hosts
     self.old_pds_host = normalize_url(old_pds_host) if old_pds_host.present?
@@ -382,6 +466,12 @@ class Migration < ApplicationRecord
     return url if url.blank?
     return url if url.start_with?('http://', 'https://')
     "https://#{url}"
+  end
+
+  def send_email_verification
+    # Send email verification instead of starting migration immediately
+    MigrationMailer.email_verification(self).deliver_later
+    Rails.logger.info("Email verification sent for migration #{token}")
   end
 
   def schedule_first_job
@@ -460,6 +550,60 @@ class Migration < ApplicationRecord
                .where.not(id: id)
                .exists?
       errors.add(:did, "already has an active migration in progress. Please wait for it to complete or fail before starting a new migration.")
+    end
+  end
+
+  # Validate PDS hosts to prevent SSRF attacks
+  def validate_pds_hosts
+    [old_pds_host, new_pds_host].each do |host|
+      next if host.blank?
+
+      begin
+        uri = URI.parse(host)
+
+        # Must use HTTPS
+        unless uri.scheme == 'https'
+          errors.add(:base, "PDS host must use HTTPS: #{host}")
+          next
+        end
+
+        # Block localhost and private IPs
+        if ['localhost', '127.0.0.1', '::1', '0.0.0.0'].include?(uri.host)
+          errors.add(:base, "PDS host cannot be localhost: #{host}")
+          next
+        end
+
+        # Check for private IP ranges (requires resolving hostname)
+        begin
+          require 'resolv'
+          ip = Resolv.getaddress(uri.host)
+          ip_addr = IPAddr.new(ip)
+
+          # Block private IP ranges (RFC 1918, loopback, link-local, etc.)
+          private_ranges = [
+            IPAddr.new('10.0.0.0/8'),      # Private
+            IPAddr.new('172.16.0.0/12'),   # Private
+            IPAddr.new('192.168.0.0/16'),  # Private
+            IPAddr.new('127.0.0.0/8'),     # Loopback
+            IPAddr.new('169.254.0.0/16'),  # Link-local
+            IPAddr.new('::1/128'),         # IPv6 loopback
+            IPAddr.new('fc00::/7'),        # IPv6 private
+            IPAddr.new('fe80::/10')        # IPv6 link-local
+          ]
+
+          if private_ranges.any? { |range| range.include?(ip_addr) }
+            errors.add(:base, "PDS host resolves to private IP: #{host}")
+            next
+          end
+        rescue Resolv::ResolvError, SocketError
+          # DNS resolution failed - could be temporary, allow it
+          # The actual connection will fail if the host doesn't exist
+          Rails.logger.warn("Could not resolve PDS host for SSRF check: #{host}")
+        end
+
+      rescue URI::InvalidURIError => e
+        errors.add(:base, "Invalid PDS host URL: #{host}")
+      end
     end
   end
 end
