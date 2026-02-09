@@ -31,6 +31,10 @@ module EuroskyConfig
   SECONDARY_COLOR = ENV.fetch('SECONDARY_COLOR', '#764ba2').freeze
   LOGO_URL = ENV['LOGO_URL']&.freeze
   FAVICON_URL = ENV['FAVICON_URL']&.freeze
+  BACKGROUND_IMAGE_URL = ENV['BACKGROUND_IMAGE_URL']&.freeze
+
+  # PDS Configuration
+  DEFAULT_TARGET_PDS = ENV['DEFAULT_TARGET_PDS']&.freeze
 
   # Validation
   class ConfigurationError < StandardError; end

@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow, noarchive">
   <meta name="googlebot" content="noindex, nofollow, noarchive">
   <%= csrf_meta_tags %>
-  <title>U-HAUL - Start Account Migration</title>
+  <title><%= EuroskyConfig::SITE_NAME %> - Start Account Migration</title>
   <% if EuroskyConfig::FAVICON_URL.present? %>
     <link rel="icon" type="image/png" href="<%= EuroskyConfig::FAVICON_URL %>">
   <% end %>
@@ -16,14 +16,19 @@
       margin: 0;
       padding: 0;
       min-height: 100vh;
-      background: url('/GMC_U-Haul_truck_front_1.JPG') no-repeat center center fixed;
+      <% if EuroskyConfig::BACKGROUND_IMAGE_URL.present? %>
+      background: url('<%= EuroskyConfig::BACKGROUND_IMAGE_URL %>') no-repeat center center fixed;
       background-size: cover;
+      <% else %>
+      background: var(--gradient);
+      <% end %>
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
     }
 
+    <% if EuroskyConfig::BACKGROUND_IMAGE_URL.present? %>
     body::before {
       content: '';
       position: fixed;
@@ -34,6 +39,7 @@
       background: rgba(0, 0, 0, 0.4);
       z-index: 0;
     }
+    <% end %>
 
     .container {
       position: relative;
@@ -283,8 +289,21 @@
       const progress4 = document.getElementById('progress-4');
       const progress5 = document.getElementById('progress-5');
 
+      // Configuration from server
+      const defaultTargetPds = '<%= EuroskyConfig::DEFAULT_TARGET_PDS %>';
+
       // Initialize
       showStep(1);
+
+      // Pre-select default target PDS if configured
+      if (defaultTargetPds && pdsSelect) {
+        // Check if the default PDS is in the select options
+        const option = Array.from(pdsSelect.options).find(opt => opt.value === defaultTargetPds);
+        if (option) {
+          pdsSelect.value = defaultTargetPds;
+          customPdsField.value = defaultTargetPds;
+        }
+      }
 
       // Show/hide steps
       function showStep(stepNumber) {
@@ -459,9 +478,20 @@
         wizardData.email = email;
         emailField.readOnly = true;
         showStep(3);
+        setupStep3();
       });
 
       // STEP 3: PDS Selection
+      // Setup Step 3: Check PDS requirements if default is set
+      function setupStep3() {
+        // If default PDS is configured and selected, check requirements automatically
+        if (defaultTargetPds && pdsSelect.value === defaultTargetPds) {
+          const status = document.getElementById('pds-status');
+          const inviteGroup = document.getElementById('invite-code-group');
+          checkPdsRequirements(defaultTargetPds, status, inviteGroup);
+        }
+      }
+
       document.getElementById('step3-back').addEventListener('click', function(e) {
         e.preventDefault();
         if (!wizardData.emailReadonly) {
@@ -662,7 +692,10 @@
           return;
         }
 
-        fullHandle = handleUsername + newHandleSuffix.textContent;
+        // Construct handle, avoiding double periods
+        const suffix = newHandleSuffix.textContent;
+        const needsPeriod = !handleUsername.endsWith('.') && !suffix.startsWith('.');
+        fullHandle = handleUsername + (needsPeriod ? '.' : '') + suffix.replace(/^\./, '');
 
         btn.disabled = true;
         btn.textContent = 'Checking availability...';
@@ -736,7 +769,15 @@
       form.addEventListener('submit', function(event) {
         event.preventDefault();
 
-        const confirmed = confirm('Are you ready to start the migration? This process will begin immediately and cannot be stopped once started.');
+        // Check if user has acknowledged the no-usage warning
+        const acknowledgeCheckbox = document.getElementById('acknowledge-no-usage');
+        if (!acknowledgeCheckbox.checked) {
+          alert('Please confirm that you understand you must not use your account during migration.');
+          acknowledgeCheckbox.focus();
+          return;
+        }
+
+        const confirmed = confirm('Are you ready to start the migration?\n\nREMEMBER: Do NOT use your account until you receive the completion email (approximately 20-30 minutes).\n\nThis process will begin immediately and cannot be stopped once started.');
         if (confirmed) {
           form.submit();
         }
@@ -747,8 +788,8 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>U-HAUL</h1>
-      <p>ATProto Account Migration Service</p>
+      <h1><%= EuroskyConfig::SITE_NAME %></h1>
+      <p><%= EuroskyConfig::SITE_SUBTITLE %></p>
     </div>
 
     <div class="content">
@@ -939,46 +980,69 @@
             </table>
           </div>
 
+           <!-- Backup Bundle Option -->
           <div style="margin-top: 32px; padding: 24px; background: #f0f7ff; border: 2px solid #007bff; border-radius: 8px;">
             <h3 style="margin-top: 0; color: #007bff; font-size: 20px;">📦 Backup Your Data</h3>
-            <div class="form-group checkbox-group" style="margin: 0;">
-              <label class="checkbox-label" style="font-size: 18px; font-weight: 500;">
-                <%= f.check_box :create_backup_bundle, id: "migration_create_backup_bundle", checked: true, style: "width: 20px; height: 20px; margin-right: 12px;" %>
-                <span>Create backup bundle before migration</span>
+            <div style="padding: 16px; background: white; border-radius: 6px; border-left: 4px solid #28a745; margin-bottom: 16px;">
+              <strong style="color: #28a745;">✓ Highly Recommended</strong>
+              <p style="margin: 8px 0 0 0; font-size: 15px; line-height: 1.6;">
+                Download a complete backup of your account data (all posts + media) before migration.
+                The backup will be available for 24 hours and sent to your email.
+              </p>
+              <ul style="margin: 12px 0 0 20px; font-size: 14px; line-height: 1.8;">
+                <li>Protects against data loss during migration</li>
+                <li>Includes all your posts, media, and account data</li>
+                <li>Can be used to restore your account if needed</li>
+              </ul>
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label style="display: flex; align-items: center; cursor: pointer; user-select: none; font-size: 16px; font-weight: 600;">
+                <%= f.check_box :create_backup_bundle, id: "migration_create_backup_bundle", checked: true, style: "width: 20px; height: 20px; margin-right: 12px; cursor: pointer;" %>
+                <span style="color: #007bff;">Create backup bundle before migration</span>
               </label>
-              <div style="margin-top: 16px; padding: 16px; background: white; border-radius: 6px; border-left: 4px solid #28a745;">
-                <strong style="color: #28a745;">✓ Highly Recommended</strong>
-                <p style="margin: 8px 0 0 0; font-size: 15px; line-height: 1.6;">
-                  Download a complete backup of your account data (all posts + media) before migration.
-                  The backup will be available for 24 hours and sent to your email.
-                </p>
-                <ul style="margin: 12px 0 0 20px; font-size: 14px; line-height: 1.8;">
-                  <li>Protects against data loss during migration</li>
-                  <li>Includes all your posts, media, and account data</li>
-                  <li>Can be used to restore your account if needed</li>
-                </ul>
-              </div>
             </div>
           </div>
 
+          <!-- Critical Warning: Do Not Use Account During Migration -->
+          <div style="margin-top: 32px; padding: 24px; background: #fef2f2; border: 3px solid #dc2626; border-radius: 8px;">
+            <h3 style="margin-top: 0; color: #dc2626; font-size: 20px; display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 24px;">⚠️</span>
+              CRITICAL: Do Not Use Your Account During Migration
+            </h3>
+            <div style="background: white; padding: 20px; border-radius: 6px; border-left: 4px solid #dc2626;">
+              <p style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #991b1b;">
+                Once you start the migration, you MUST NOT use your account until it completes.
+              </p>
+              <p style="margin: 0 0 12px 0; font-size: 15px; line-height: 1.6; color: #333;">
+                <strong>Any activity during migration will NOT be transferred:</strong>
+              </p>
+              <ul style="margin: 0 0 16px 20px; font-size: 15px; line-height: 1.8; color: #333;">
+                <li>Posts, replies, or likes made during migration will be lost</li>
+                <li>Follows or blocks added during migration will not carry over</li>
+                <li>Profile changes will not be included</li>
+                <li>Media uploads will not be transferred</li>
+              </ul>
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #333;">
+                <strong>What to do:</strong> Close all apps and browser tabs with your account. Wait for the migration completion email (~20-30 minutes) before logging in again.
+              </p>
+            </div>
+            <div class="form-group" style="margin: 20px 0 0 0;">
+              <label style="display: flex; align-items: center; cursor: pointer; user-select: none; font-size: 16px; font-weight: 600;">
+                <input type="checkbox" id="acknowledge-no-usage" style="margin-right: 12px; width: 20px; height: 20px; cursor: pointer;" required>
+                <span style="color: #991b1b;">I understand I must not use my account during migration</span>
+              </label>
+            </div>
+          </div>
+
+         
+
           <div class="wizard-navigation">
             <button type="button" id="step5-back" class="wizard-back-btn">Back</button>
-            <%= f.submit "Start Migration", class: "submit-button" %>
+            <%= f.submit "Start Migration", class: "submit-button", id: "start-migration-btn" %>
           </div>
         </div>
 
       <% end %>
-
-      <div class="warning-box" role="alert">
-        <h3>Important Information</h3>
-        <ul>
-          <li>This migration will take approximately 20-30 minutes</li>
-          <li>Your account will be temporarily unavailable during migration</li>
-          <li>You must have access to your old account's password</li>
-          <li>You will need a PLC operation token from <a href="https://plc.directory" target="_blank" rel="noopener">plc.directory</a></li>
-          <li>Make sure your new PDS is ready to accept your account</li>
-        </ul>
-      </div>
 
       <!-- Image Attribution -->
       <div style="margin-top: 16px; padding: 8px; font-size: 11px; color: #666; text-align: center;">
