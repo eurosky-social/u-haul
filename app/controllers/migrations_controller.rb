@@ -165,6 +165,9 @@ class MigrationsController < ApplicationController
     # Sanitize handle
     handle = sanitize_handle(handle)
 
+    # Detect handle type (DNS-verified custom domain vs PDS-hosted)
+    handle_info = GoatService.detect_handle_type(handle)
+
     # Resolve handle to DID and PDS
     resolution = GoatService.resolve_handle(handle)
     pds_host = resolution[:pds_host]
@@ -177,7 +180,11 @@ class MigrationsController < ApplicationController
       did: did,
       pds_host: pds_host,
       email: account_details[:email],
-      handle: account_details[:handle]
+      handle: account_details[:handle],
+      handle_type: handle_info[:type],
+      handle_verified_via: handle_info[:verified_via],
+      can_preserve_handle: handle_info[:can_preserve],
+      handle_preservation_note: handle_info[:reason]
     }
   rescue GoatService::NetworkError => e
     Rails.logger.error("Failed to resolve handle #{handle}: #{e.message}")

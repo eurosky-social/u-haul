@@ -269,7 +269,11 @@
         emailReadonly: false,
         authenticated: false,
         pdsHost: null,
-        availableDomains: []
+        availableDomains: [],
+        handleType: null,           // 'dns_verified' or 'pds_hosted'
+        canPreserveHandle: false,   // true if custom domain handle can be preserved
+        oldHandle: null,            // original handle for preservation
+        handleVerifiedVia: null     // 'dns', 'http_wellknown', or 'pds_api'
       };
 
       // Progress indicators
@@ -387,6 +391,12 @@
             wizardData.emailReadonly = false;
           }
 
+          // Store handle type information for step 4
+          wizardData.handleType = data.handle_type || 'pds_hosted';
+          wizardData.canPreserveHandle = data.can_preserve_handle || false;
+          wizardData.oldHandle = handle;
+          wizardData.handleVerifiedVia = data.handle_verified_via;
+
           // Proceed to step 2
           setTimeout(() => {
             handleField.readOnly = true;
@@ -421,7 +431,13 @@
 
       document.getElementById('step2-back').addEventListener('click', function(e) {
         e.preventDefault();
-        // Don't reset readonly state - keep authenticated fields readonly
+        // Unlock fields so user can edit
+        handleField.readOnly = false;
+        passwordField.readOnly = false;
+        handleField.classList.remove('readonly-field');
+        passwordField.classList.remove('readonly-field');
+        // Reset authentication state
+        wizardData.authenticated = false;
         showStep(1);
       });
 
@@ -555,20 +571,61 @@
       // STEP 4: New Handle
       const newHandleInput = document.getElementById('new-handle-input');
       const newHandleSuffix = document.getElementById('new-handle-suffix');
+      const preservationSection = document.getElementById('handle-preservation-section');
+      const newHandleSection = document.getElementById('new-handle-section');
+      const preserveCheckbox = document.getElementById('preserve-handle-checkbox');
+      const customHandleDisplay = document.getElementById('custom-handle-display');
 
       function setupStep4() {
-        // Set the domain suffix
-        if (wizardData.availableDomains.length > 0) {
-          const domain = wizardData.availableDomains[0];
-          newHandleSuffix.textContent = domain.startsWith('.') ? domain : '.' + domain;
+        // Check if user has a custom domain handle
+        if (wizardData.canPreserveHandle && wizardData.handleType === 'dns_verified') {
+          // Show preservation option
+          preservationSection.style.display = 'block';
+          customHandleDisplay.textContent = '@' + wizardData.oldHandle;
+          preserveCheckbox.checked = true;
+
+          // Hide new handle input initially (show only if they uncheck)
+          newHandleSection.style.display = 'none';
         } else {
-          // Extract domain from PDS host
-          const pdsUrl = new URL(wizardData.pdsHost);
-          newHandleSuffix.textContent = '.' + pdsUrl.hostname;
+          // PDS-hosted handle - must choose new handle
+          preservationSection.style.display = 'none';
+          newHandleSection.style.display = 'block';
+
+          // Set the domain suffix
+          if (wizardData.availableDomains.length > 0) {
+            const domain = wizardData.availableDomains[0];
+            newHandleSuffix.textContent = domain.startsWith('.') ? domain : '.' + domain;
+          } else {
+            // Extract domain from PDS host
+            const pdsUrl = new URL(wizardData.pdsHost);
+            newHandleSuffix.textContent = '.' + pdsUrl.hostname;
+          }
+          newHandleInput.value = '';
+          newHandleInput.focus();
         }
-        newHandleInput.value = '';
-        newHandleInput.focus();
       }
+
+      // Toggle new handle input when preservation checkbox changes
+      preserveCheckbox.addEventListener('change', function(e) {
+        if (e.target.checked) {
+          // Preserving custom handle
+          newHandleSection.style.display = 'none';
+        } else {
+          // Creating new handle
+          newHandleSection.style.display = 'block';
+
+          // Set the domain suffix
+          if (wizardData.availableDomains.length > 0) {
+            const domain = wizardData.availableDomains[0];
+            newHandleSuffix.textContent = domain.startsWith('.') ? domain : '.' + domain;
+          } else {
+            const pdsUrl = new URL(wizardData.pdsHost);
+            newHandleSuffix.textContent = '.' + pdsUrl.hostname;
+          }
+          newHandleInput.value = '';
+          newHandleInput.focus();
+        }
+      });
 
       document.getElementById('step4-back').addEventListener('click', function(e) {
         e.preventDefault();
@@ -578,15 +635,34 @@
       document.getElementById('step4-next').addEventListener('click', function(e) {
         e.preventDefault();
 
+        const btn = e.target;
+        const status = document.getElementById('step4-status');
+        let fullHandle;
+
+        // Check if user is preserving their custom domain handle
+        if (wizardData.canPreserveHandle && preserveCheckbox.checked) {
+          // Use the original handle
+          fullHandle = wizardData.oldHandle;
+
+          // Store in hidden field and proceed immediately (no availability check needed)
+          document.getElementById('migration_new_handle').value = fullHandle;
+          showStatus(status, 'Keeping your custom domain handle!', 'success');
+
+          setTimeout(() => {
+            showStep(5);
+            setupStep5();
+          }, 500);
+          return;
+        }
+
+        // User is creating a new handle - validate and check availability
         const handleUsername = newHandleInput.value.trim();
         if (!handleUsername) {
           alert('Please enter a handle');
           return;
         }
 
-        const fullHandle = handleUsername + newHandleSuffix.textContent;
-        const btn = e.target;
-        const status = document.getElementById('step4-status');
+        fullHandle = handleUsername + newHandleSuffix.textContent;
 
         btn.disabled = true;
         btn.textContent = 'Checking availability...';
@@ -795,7 +871,27 @@
         <div id="step-4" class="wizard-step">
           <h2>Step 4: New Handle</h2>
 
-          <div class="form-group">
+          <!-- Custom Domain Handle Preservation Option -->
+          <div id="handle-preservation-section" style="display: none; margin-bottom: 24px; padding: 16px; background: #f0f9ff; border: 2px solid #0ea5e9; border-radius: 8px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 18px; color: #0369a1;">🎉 Custom Domain Detected!</h3>
+            <p style="margin: 0 0 16px 0; color: #334155;">
+              Your handle <strong id="custom-handle-display"></strong> is a custom domain that you control.
+              You can keep using this handle on the new PDS!
+            </p>
+
+            <div class="form-group" style="margin: 0;">
+              <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="preserve-handle-checkbox" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                <span style="font-weight: 500;">Keep my current handle</span>
+              </label>
+              <div class="helper-text" style="margin-left: 26px;">
+                Your DNS record will continue to point to your account on the new PDS
+              </div>
+            </div>
+          </div>
+
+          <!-- Regular Handle Input (shown for PDS-hosted handles or when user unchecks preservation) -->
+          <div id="new-handle-section" class="form-group">
             <label for="new-handle-input">Your New Handle</label>
             <div style="position: relative;">
               <input type="text" id="new-handle-input" class="form-control" placeholder="username" style="padding-right: 200px;">

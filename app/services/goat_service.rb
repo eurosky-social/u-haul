@@ -1029,6 +1029,99 @@ class GoatService
     raise NetworkError, "Failed to resolve DID to PDS: #{e.message}"
   end
 
+  # Detect if a handle is DNS-verified (custom domain) or PDS-hosted
+  # Returns a hash with { type: 'dns_verified' | 'pds_hosted', verified_via: 'dns' | 'http_wellknown' | 'pds_api' }
+  def self.detect_handle_type(handle)
+    Rails.logger.info("Detecting handle type for: #{handle}")
+
+    # Normalize handle
+    domain = handle.strip.downcase
+
+    # Check for common PDS-hosted domain patterns
+    pds_hosted_suffixes = [
+      '.bsky.social',
+      '.blacksky.app',
+      '.staging.bsky.dev',
+      '.test.bsky.network'
+    ]
+
+    # If handle ends with known PDS-hosted suffix, it's definitely PDS-hosted
+    if pds_hosted_suffixes.any? { |suffix| domain.end_with?(suffix) }
+      Rails.logger.info("Handle #{handle} identified as PDS-hosted (known suffix)")
+      return {
+        type: 'pds_hosted',
+        verified_via: 'pds_api',
+        can_preserve: false,
+        reason: 'This handle is hosted by the PDS provider and cannot be transferred'
+      }
+    end
+
+    # Try DNS TXT record lookup
+    begin
+      txt_record = "_atproto.#{domain}"
+      Rails.logger.debug("Attempting DNS TXT lookup for #{txt_record}")
+
+      require 'resolv'
+      resolver = Resolv::DNS.new
+      txt_records = resolver.getresources(txt_record, Resolv::DNS::Resource::IN::TXT)
+
+      txt_records.each do |record|
+        record.strings.each do |string|
+          if string.start_with?('did=')
+            Rails.logger.info("Handle #{handle} identified as DNS-verified (DNS TXT record found)")
+            return {
+              type: 'dns_verified',
+              verified_via: 'dns',
+              can_preserve: true,
+              dns_record: string
+            }
+          end
+        end
+      end
+    rescue StandardError => e
+      Rails.logger.debug("DNS lookup failed for #{handle}: #{e.message}")
+      # Continue to check HTTP well-known
+    end
+
+    # Try HTTP well-known endpoint
+    begin
+      url = "https://#{domain}/.well-known/atproto-did"
+      Rails.logger.debug("Attempting HTTP well-known lookup at #{url}")
+
+      response = HTTParty.get(url, timeout: 5, follow_redirects: true)
+
+      if response.success? && response.body&.start_with?('did:')
+        Rails.logger.info("Handle #{handle} identified as custom domain (HTTP well-known)")
+        return {
+          type: 'dns_verified',
+          verified_via: 'http_wellknown',
+          can_preserve: true
+        }
+      end
+    rescue StandardError => e
+      Rails.logger.debug("HTTP well-known lookup failed for #{handle}: #{e.message}")
+      # Continue
+    end
+
+    # If no DNS or HTTP well-known found, it's likely PDS-hosted
+    Rails.logger.info("Handle #{handle} identified as PDS-hosted (no DNS/well-known found)")
+    {
+      type: 'pds_hosted',
+      verified_via: 'pds_api',
+      can_preserve: false,
+      reason: 'This handle is hosted by the PDS provider and cannot be transferred'
+    }
+  rescue StandardError => e
+    Rails.logger.warn("Error detecting handle type for #{handle}: #{e.message}")
+    # Default to PDS-hosted on error
+    {
+      type: 'pds_hosted',
+      verified_via: 'unknown',
+      can_preserve: false,
+      reason: 'Could not verify handle type'
+    }
+  end
+
   # Convenience method to resolve handle directly to PDS host
   # Returns a hash with { did: '...', pds_host: '...' }
   def self.resolve_handle(handle)
