@@ -8,9 +8,11 @@ development:
   database: eurosky_migration_development
 
 test:
-  <<: *default
-  database: eurosky_migration_test
+  adapter: sqlite3
+  database: storage/test.sqlite3
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  timeout: 5000
 
 production:
-  url: <%= ENV.fetch("DATABASE_URL") %>
+  url: <%= ENV.fetch("DATABASE_URL", nil) %>
   <<: *default

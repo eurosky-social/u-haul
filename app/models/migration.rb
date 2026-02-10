@@ -55,6 +55,12 @@ class Migration < ApplicationRecord
   # Prepend the expiration check module AFTER Lockbox has defined its methods
   prepend ExpirationChecks
 
+  # JSON serialization for progress_data
+  # Only needed for SQLite (text column), PostgreSQL uses native jsonb
+  if ActiveRecord::Base.connection.adapter_name == 'SQLite'
+    serialize :progress_data, coder: JSON
+  end
+
   # Validations
   validates :did, presence: true, format: { with: /\Adid:[a-z0-9]+:[a-z0-9._:\-]+\z/i }
   validates :token, presence: true, uniqueness: true, format: { with: /\AEURO-[A-Z0-9]{16}\z/ }

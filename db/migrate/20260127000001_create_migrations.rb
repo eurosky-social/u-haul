@@ -16,7 +16,13 @@ class CreateMigrations < ActiveRecord::Migration[7.1]
       t.string :new_handle, null: false
 
       # Progress tracking (JSON)
-      t.jsonb :progress_data, default: {}
+      # PostgreSQL: native jsonb column with default {}
+      # SQLite: text column with default "{}" and serialize in model
+      if ActiveRecord::Base.connection.adapter_name == 'PostgreSQL'
+        t.jsonb :progress_data, default: {}
+      else
+        t.text :progress_data, default: "{}"
+      end
 
       # Memory management
       t.integer :estimated_memory_mb, default: 0

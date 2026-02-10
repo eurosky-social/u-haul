@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Run tests locally without Docker (uses SQLite)
+
+set -e
+
+# Check if running in Docker (has /.dockerenv or DOCKER_CONTAINER env var)
+if [ -f /.dockerenv ] || [ -n "$DOCKER_CONTAINER" ]; then
+  echo "Running tests in Docker container..."
+  RAILS_ENV=test bundle exec rails test "$@"
+  exit 0
+fi
+
+# Running locally
+echo "Running tests locally (SQLite)..."
+
+# Unset RBENV_VERSION if it's set (allows .ruby-version to take effect)
+unset RBENV_VERSION
+
+# Check Ruby version
+REQUIRED_RUBY="3.2.2"
+CURRENT_RUBY=$(ruby -e 'puts RUBY_VERSION')
+
+if [[ "$CURRENT_RUBY" != "$REQUIRED_RUBY"* ]]; then
+  echo "⚠️  Warning: Ruby version mismatch"
+  echo "   Required: $REQUIRED_RUBY"
+  echo "   Current:  $CURRENT_RUBY"
+  echo ""
+
+  # Check if rbenv is available and has 3.2.2
+  if command -v rbenv &> /dev/null; then
+    if rbenv versions | grep -q "3.2.2"; then
+      echo "Ruby 3.2.2 is installed via rbenv!"
+      echo "Run this in your shell:"
+      echo "  unset RBENV_VERSION"
+      echo "  cd $(pwd)"
+      echo "  ./bin/test"
+      echo ""
+    else
+      echo "Install Ruby 3.2.2 using:"
+      echo "  rbenv install 3.2.2"
+      echo ""
+    fi
+  else
+    echo "Install Ruby 3.2.2 using:"
+    echo "  rbenv install 3.2.2 && rbenv local 3.2.2"
+    echo "  OR"
+    echo "  rvm install 3.2.2 && rvm use 3.2.2"
+    echo ""
+  fi
+
+  echo "Or run tests in Docker: docker compose exec eurosky-web bash -c 'RAILS_ENV=test bin/rails test'"
+  exit 1
+fi
+
+# Create storage directory if it doesn't exist
+mkdir -p storage
+
+# Check if bundle is installed
+if ! command -v bundle &> /dev/null; then
+  echo "Error: bundler not installed. Run: gem install bundler"
+  exit 1
+fi
+
+# Install gems if needed
+if [ ! -d "vendor/bundle" ] && [ ! -f ".bundle/config" ]; then
+  echo "Installing gems..."
+  bundle install
+fi
+
+# Set up test database
+echo "Setting up test database..."
+RAILS_ENV=test bundle exec rails db:test:prepare
+
+# Run tests
+echo "Running tests..."
+RAILS_ENV=test bundle exec rails test "$@"
