@@ -1,8 +1,6 @@
 require "test_helper"
 
-# Test that progress_data JSON serialization works consistently across
-# SQLite (test environment with text column + serialize) and
-# PostgreSQL (production environment with native jsonb column)
+# Test that progress_data JSON serialization works with PostgreSQL's native jsonb column
 class MigrationProgressDataTest < ActiveSupport::TestCase
   setup do
     @migration = Migration.new(
@@ -133,19 +131,8 @@ class MigrationProgressDataTest < ActiveSupport::TestCase
     # Document which adapter we're testing with
     puts "\n[progress_data test] Running with #{adapter} adapter"
 
-    if adapter == 'PostgreSQL'
-      # In production, should be native jsonb column
-      column = ActiveRecord::Base.connection.columns(:migrations).find { |c| c.name == 'progress_data' }
-      assert_equal 'jsonb', column.sql_type, "Production should use native jsonb column"
-    elsif adapter == 'SQLite'
-      # In tests, should be text column with serialize in model
-      column = ActiveRecord::Base.connection.columns(:migrations).find { |c| c.name == 'progress_data' }
-      assert_match(/text/i, column.sql_type.to_s, "SQLite should use text column")
-
-      # Verify serialize is configured in model
-      serialized = Migration.type_for_attribute('progress_data')
-      assert serialized.is_a?(ActiveRecord::Type::Serialized),
-             "Model should have serialize configured for progress_data"
-    end
+    # All environments now use PostgreSQL with native jsonb column
+    column = ActiveRecord::Base.connection.columns(:migrations).find { |c| c.name == 'progress_data' }
+    assert_equal 'jsonb', column.sql_type, "Should use native jsonb column"
   end
 end

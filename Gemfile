@@ -42,9 +42,6 @@ group :development, :test do
 end
 
 group :test do
-  # SQLite for fast local testing (no Docker needed)
-  gem "sqlite3", "~> 1.7"
-
   # HTTP mocking and recording
   gem "webmock", "~> 3.19"
   gem "vcr", "~> 6.2"

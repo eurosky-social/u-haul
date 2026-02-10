@@ -8,10 +8,8 @@ development:
   database: eurosky_migration_development
 
 test:
-  adapter: sqlite3
-  database: storage/test.sqlite3
-  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
-  timeout: 5000
+  <<: *default
+  database: eurosky_migration_test
 
 production:
   url: <%= ENV.fetch("DATABASE_URL", nil) %>
