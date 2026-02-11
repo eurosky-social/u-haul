@@ -178,21 +178,27 @@ module MigrationErrorHelper
   end
 
   def self.account_exists_context(migration)
+    target_pds_support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
+
     {
       severity: :error,
       icon: "👥",
       title: "Account Already Exists on Target PDS",
-      what_happened: "An account with your DID already exists on the target PDS. This is likely from a previous failed migration attempt.",
-      current_status: "Migration blocked - orphaned account needs cleanup",
+      what_happened: "An account with your DID already exists on the target PDS (#{migration.new_pds_host}). This orphaned account is likely from a previous failed migration attempt.",
+      current_status: "Migration paused - orphaned account needs removal by PDS provider",
       what_to_do: [
-        "This requires manual cleanup of the orphaned account",
-        "Option 1: Use the cleanup script (if you have server access):",
-        "  cd scripts && ./cleanup_orphaned_account_db.sh #{migration.did}",
-        "Option 2: Contact the target PDS administrator to delete the orphaned account",
-        "After cleanup, you can retry this migration or start a new one"
+        "📧 Contact the target PDS provider to remove the orphaned account:",
+        "   Email: #{target_pds_support_email}",
+        "   Include: Migration Token (#{migration.token}) and DID (#{migration.did})",
+        "",
+        "Once the orphaned account is removed, you can retry this migration.",
+        "",
+        "⚠️ This requires action from the PDS provider - you cannot fix this yourself."
       ],
       show_retry_button: false,
-      show_cleanup_instructions: true,
+      show_contact_support: true,
+      support_email: target_pds_support_email,
+      migration_token: migration.token,
       help_link: "/docs/troubleshooting#orphaned-accounts",
       did: migration.did
     }

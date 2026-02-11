@@ -101,4 +101,15 @@ class MigrationMailer < ApplicationMailer
       subject: "Blob Retry Complete: #{successful_count} succeeded, #{failed_count} still failed (#{migration.token})"
     )
   end
+
+  def orphaned_account_error(migration)
+    @migration = migration
+    @migration_url = migration_by_token_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))
+    @target_pds_support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
+
+    mail(
+      to: migration.email,
+      subject: "⚠️ Migration Paused - Orphaned Account on Target PDS (#{migration.token})"
+    )
+  end
 end

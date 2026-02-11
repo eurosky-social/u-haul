@@ -19,7 +19,6 @@ Rails.application.routes.draw do
       get :status
       get :download_backup
       post :retry
-      post :cancel
       get :export_recovery_data
       post :retry_failed_blobs
     end
@@ -32,7 +31,6 @@ Rails.application.routes.draw do
   post "/migrate/:token/resend_otp", to: "migrations#resend_plc_otp", as: :resend_plc_otp_by_token
   get "/migrate/:token/download", to: "migrations#download_backup", as: :migration_download_backup
   post "/migrate/:token/retry", to: "migrations#retry", as: :retry_migration_by_token
-  post "/migrate/:token/cancel", to: "migrations#cancel", as: :cancel_migration_by_token
   get "/migrate/:token/export_recovery_data", to: "migrations#export_recovery_data", as: :export_recovery_data_migration_by_token
   post "/migrate/:token/retry_failed_blobs", to: "migrations#retry_failed_blobs", as: :retry_failed_blobs_by_token
 end

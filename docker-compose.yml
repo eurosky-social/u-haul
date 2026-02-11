@@ -80,6 +80,8 @@ services:
       RAILS_SERVE_STATIC_FILES: "true"
       ATP_PLC_HOST: ${ATP_PLC_HOST:-https://plc.directory}
       PDS_DISABLE_SSRF_PROTECTION: "true"
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@example.com}
+      TARGET_PDS_SUPPORT_EMAIL: ${TARGET_PDS_SUPPORT_EMAIL:-support@example.com}
     ports:
       - "3001:3000"  # Changed from 3000 to avoid conflict with u-at-proto
     depends_on:
@@ -114,10 +116,11 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres:5432/eurosky_migration_${RAILS_ENV:-development}
       REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis:6379/0
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
-      DEBUG_PASSWORDS: 'true'
       MAX_CONCURRENT_MIGRATIONS: ${MAX_CONCURRENT_MIGRATIONS:-5}
       ATP_PLC_HOST: ${ATP_PLC_HOST:-https://plc.directory}
       PDS_DISABLE_SSRF_PROTECTION: "true"
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@example.com}
+      TARGET_PDS_SUPPORT_EMAIL: ${TARGET_PDS_SUPPORT_EMAIL:-support@example.com}
     depends_on:
       eurosky-postgres:
         condition: service_healthy

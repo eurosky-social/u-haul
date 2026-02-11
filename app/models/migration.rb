@@ -201,21 +201,6 @@ class Migration < ApplicationRecord
     current_job_attempt.to_i > 1
   end
 
-  # Check if migration can be safely cancelled
-  def can_cancel?
-    # Cannot cancel during PLC update or after activation
-    !['pending_plc', 'pending_activation', 'completed'].include?(status)
-  end
-
-  def cancel!
-    return false unless can_cancel?
-
-    update!(
-      status: :failed,
-      last_error: "Migration cancelled by user at #{Time.current.iso8601}"
-    )
-  end
-
   # Progress tracking
   def update_blob_progress!(cid:, size:, uploaded:)
     progress_data['blobs'] ||= {}

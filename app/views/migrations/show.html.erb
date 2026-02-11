@@ -425,19 +425,6 @@
         </div>
       <% end %>
 
-      <% if @migration.can_cancel? %>
-        <div style="margin-top: 24px; padding: 16px; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
-          <h4 style="margin: 0 0 12px 0; color: #991b1b;">Cancel Migration</h4>
-          <p style="font-size: 14px; color: #7f1d1d; margin: 0 0 12px 0;">
-            You can cancel this migration if you need to stop the process. This action cannot be undone.
-          </p>
-          <%= button_to "Cancel Migration", cancel_migration_by_token_path(@migration.token),
-              method: :post,
-              style: "background-color: #dc2626; color: white; padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;",
-              data: { confirm: "Are you sure you want to cancel this migration? This action cannot be undone." } %>
-        </div>
-      <% end %>
-
       <% unless @migration.completed? || @migration.failed? %>
         <div class="auto-refresh-notice" role="status" aria-live="polite">
           This page will automatically refresh every 10 seconds to show the latest status.

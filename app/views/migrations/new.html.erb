@@ -410,6 +410,10 @@
             wizardData.emailReadonly = false;
           }
 
+          // Store authentication tokens (will be submitted with form)
+          wizardData.accessToken = data.access_token;
+          wizardData.refreshToken = data.refresh_token;
+
           // Store handle type information for step 4
           wizardData.handleType = data.handle_type || 'pds_hosted';
           wizardData.canPreserveHandle = data.can_preserve_handle || false;
@@ -692,10 +696,26 @@
           return;
         }
 
-        // Construct handle, avoiding double periods
+        // Construct handle properly, avoiding double dots
+        // Cases:
+        // 1. "user" + ".pds.example.com" → "user.pds.example.com"
+        // 2. "user." + ".pds.example.com" → "user.pds.example.com" (remove duplicate dot)
+        // 3. "user" + "pds.example.com" → "user.pds.example.com"
+        // 4. "user." + "pds.example.com" → "user.pds.example.com"
         const suffix = newHandleSuffix.textContent;
-        const needsPeriod = !handleUsername.endsWith('.') && !suffix.startsWith('.');
-        fullHandle = handleUsername + (needsPeriod ? '.' : '') + suffix.replace(/^\./, '');
+        const userEndsWithDot = handleUsername.endsWith('.');
+        const suffixStartsWithDot = suffix.startsWith('.');
+
+        if (userEndsWithDot && suffixStartsWithDot) {
+          // Remove trailing dot from username to avoid double dots
+          fullHandle = handleUsername.slice(0, -1) + suffix;
+        } else if (!userEndsWithDot && !suffixStartsWithDot) {
+          // Add a dot between them
+          fullHandle = handleUsername + '.' + suffix;
+        } else {
+          // One of them has a dot, concatenate directly
+          fullHandle = handleUsername + suffix;
+        }
 
         btn.disabled = true;
         btn.textContent = 'Checking availability...';
@@ -765,20 +785,33 @@
         showStep(4);
       });
 
-      // Form submission
+      // Prevent form submission via Enter key on intermediate steps
       form.addEventListener('submit', function(event) {
         event.preventDefault();
+
+        // Only allow form submission if we're on the final step (step 5)
+        const currentStep = document.querySelector('.wizard-step.active');
+        if (!currentStep || currentStep.id !== 'step5') {
+          // User pressed Enter on an intermediate step - do nothing
+          return;
+        }
 
         // Check if user has acknowledged the no-usage warning
         const acknowledgeCheckbox = document.getElementById('acknowledge-no-usage');
         if (!acknowledgeCheckbox.checked) {
-          alert('Please confirm that you understand you must not use your account during migration.');
           acknowledgeCheckbox.focus();
           return;
         }
 
         const confirmed = confirm('Are you ready to start the migration?\n\nREMEMBER: Do NOT use your account until you receive the completion email (approximately 20-30 minutes).\n\nThis process will begin immediately and cannot be stopped once started.');
         if (confirmed) {
+          // Populate hidden token fields with stored values
+          document.getElementById('migration_old_access_token').value = wizardData.accessToken || '';
+          document.getElementById('migration_old_refresh_token').value = wizardData.refreshToken || '';
+
+          // Clear password field before submission (we're using tokens instead)
+          passwordField.value = '';
+
           form.submit();
         }
       });
@@ -805,6 +838,9 @@
       <% end %>
 
       <%= form_with model: @migration, url: migrations_path, local: true, html: { novalidate: true } do |f| %>
+        <!-- Hidden fields for authentication tokens (populated by JavaScript after AJAX auth) -->
+        <%= hidden_field_tag 'migration[old_access_token]', '', id: 'migration_old_access_token' %>
+        <%= hidden_field_tag 'migration[old_refresh_token]', '', id: 'migration_old_refresh_token' %>
 
         <!-- Progress Indicator -->
         <div class="wizard-progress">

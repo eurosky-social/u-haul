@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content='text/html; charset=UTF-8' http-equiv='Content-Type' />
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+      color: white;
+      padding: 30px;
+      border-radius: 8px 8px 0 0;
+      text-align: center;
+    }
+    .content {
+      background: #f8f9fa;
+      padding: 30px;
+      border-radius: 0 0 8px 8px;
+    }
+    .error-box {
+      background: #fee2e2;
+      border-left: 4px solid #dc2626;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 6px;
+    }
+    .info-box {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .contact-box {
+      background: white;
+      border: 2px solid #F57F29;
+      padding: 20px;
+      margin: 25px 0;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .contact-button {
+      display: inline-block;
+      background: #F57F29;
+      color: white;
+      padding: 15px 40px;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 15px 0;
+    }
+    .contact-button:hover {
+      background: #d66a1f;
+    }
+    .footer {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #ddd;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+    }
+    .monospace {
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      background: rgba(0,0,0,0.05);
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚠️ Migration Issue</h1>
+    <p>Orphaned Account Found on Target PDS</p>
+    <p>Migration <%= @migration.token %></p>
+  </div>
+
+  <div class="content">
+    <p>Hello,</p>
+
+    <p>Your migration from <strong><%= @migration.old_handle %></strong> to <strong><%= @migration.new_pds_host %></strong> encountered an issue.</p>
+
+    <div class="error-box">
+      <h3 style="margin-top: 0; color: #991b1b;">🚫 What Happened</h3>
+      <p style="margin-bottom: 0;">
+        An account with your DID (<span class="monospace"><%= @migration.did %></span>) already exists on the target PDS <strong><%= @migration.new_pds_host %></strong>.
+      </p>
+      <p style="margin-top: 10px; margin-bottom: 0;">
+        This orphaned account is likely from a previous failed migration attempt and must be removed before your migration can proceed.
+      </p>
+    </div>
+
+    <div class="info-box">
+      <h3 style="margin-top: 0;">📋 What This Means</h3>
+      <ul style="margin: 10px 0;">
+        <li>Your migration has been <strong>paused</strong> (not failed permanently)</li>
+        <li>No data has been lost or damaged</li>
+        <li>The target PDS provider needs to remove the orphaned account</li>
+        <li>Once removed, you can retry your migration</li>
+      </ul>
+    </div>
+
+    <div class="contact-box">
+      <h3 style="margin-top: 0; color: #F57F29;">📧 Next Steps: Contact PDS Provider</h3>
+      <p style="margin-bottom: 15px;">
+        Please contact the support team for <strong><%= @migration.new_pds_host %></strong> to request removal of the orphaned account.
+      </p>
+      <a href="mailto:<%= @target_pds_support_email %>?subject=Orphaned%20Account%20Removal%20Request%20-%20Migration%20<%= @migration.token %>&body=Hello,%0D%0A%0D%0AI%20am%20trying%20to%20migrate%20to%20<%= URI.encode_www_form_component(@migration.new_pds_host) %>%20but%20encountered%20an%20orphaned%20account%20error.%0D%0A%0D%0AMigration%20Token:%20<%= @migration.token %>%0D%0ADID:%20<%= @migration.did %>%0D%0A%0D%0ACould%20you%20please%20remove%20the%20orphaned%20account%20so%20I%20can%20retry%20my%20migration?%0D%0A%0D%0AThank%20you!" class="contact-button">
+        Email <%= @target_pds_support_email %>
+      </a>
+      <p style="font-size: 14px; color: #666; margin-top: 15px;">
+        <strong>Include in your message:</strong><br>
+        • Migration Token: <code><%= @migration.token %></code><br>
+        • DID: <code><%= @migration.did %></code>
+      </p>
+    </div>
+
+    <div class="info-box">
+      <h3 style="margin-top: 0;">⏳ After Support Responds</h3>
+      <p style="margin-bottom: 10px;">Once the orphaned account has been removed:</p>
+      <ol style="margin: 10px 0;">
+        <li>Return to your <a href="<%= @migration_url %>">migration status page</a></li>
+        <li>Click the "Retry Migration" button</li>
+        <li>Your migration will resume automatically</li>
+      </ol>
+    </div>
+
+    <p style="margin-top: 30px; font-size: 14px; color: #666;">
+      <strong>Need help?</strong> Visit your <a href="<%= @migration_url %>" style="color: #F57F29;">migration status page</a> for more details.
+    </p>
+
+    <div class="footer">
+      <p>Migration Token: <code><%= @migration.token %></code></p>
+      <p>DID: <code><%= @migration.did %></code></p>
+      <p>Target PDS: <%= @migration.new_pds_host %></p>
+      <p style="margin-top: 20px;">Eurosky Migration Service</p>
+    </div>
+  </div>
+</body>
+</html>

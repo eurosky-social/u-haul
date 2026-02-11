@@ -1,0 +1,53 @@
+⚠️ MIGRATION ISSUE - ORPHANED ACCOUNT FOUND
+==========================================
+
+Migration Token: <%= @migration.token %>
+
+Hello,
+
+Your migration from <%= @migration.old_handle %> to <%= @migration.new_pds_host %> encountered an issue.
+
+
+🚫 WHAT HAPPENED
+----------------
+An account with your DID (<%= @migration.did %>) already exists on the target PDS <%= @migration.new_pds_host %>.
+
+This orphaned account is likely from a previous failed migration attempt and must be removed before your migration can proceed.
+
+
+📋 WHAT THIS MEANS
+------------------
+• Your migration has been PAUSED (not failed permanently)
+• No data has been lost or damaged
+• The target PDS provider needs to remove the orphaned account
+• Once removed, you can retry your migration
+
+
+📧 NEXT STEPS: CONTACT PDS PROVIDER
+------------------------------------
+Please contact the support team for <%= @migration.new_pds_host %> to request removal of the orphaned account:
+
+Email: <%= @target_pds_support_email %>
+
+Include in your message:
+• Migration Token: <%= @migration.token %>
+• DID: <%= @migration.did %>
+
+
+⏳ AFTER SUPPORT RESPONDS
+--------------------------
+Once the orphaned account has been removed:
+1. Return to your migration status page: <%= @migration_url %>
+2. Click the "Retry Migration" button
+3. Your migration will resume automatically
+
+
+---
+
+Migration Details:
+- Token: <%= @migration.token %>
+- DID: <%= @migration.did %>
+- Target PDS: <%= @migration.new_pds_host %>
+- Support Contact: <%= @target_pds_support_email %>
+
+Eurosky Migration Service

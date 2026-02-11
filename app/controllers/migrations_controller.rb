@@ -183,6 +183,8 @@ class MigrationsController < ApplicationController
       pds_host: pds_host,
       email: account_details[:email],
       handle: account_details[:handle],
+      access_token: account_details[:access_token],
+      refresh_token: account_details[:refresh_token],
       handle_type: handle_info[:type],
       handle_verified_via: handle_info[:verified_via],
       can_preserve_handle: handle_info[:can_preserve],
@@ -271,16 +273,16 @@ class MigrationsController < ApplicationController
         end
       end
 
-      # Authenticate against old PDS to capture session tokens
-      # The user's password is used once here and never stored
-      user_password = params[:migration][:password]
-      if user_password.blank?
-        @migration.errors.add(:base, "Password is required. Please go back and enter your password.")
+      # Retrieve the old PDS tokens from the AJAX authentication (stored in hidden fields)
+      # These tokens were obtained during the lookup_handle step
+      old_access_token = params[:migration][:old_access_token]
+      old_refresh_token = params[:migration][:old_refresh_token]
+
+      if old_access_token.blank? || old_refresh_token.blank?
+        @migration.errors.add(:base, "Authentication tokens are missing. Please go back and re-authenticate.")
         render :new, status: :unprocessable_entity
         return
       end
-
-      old_pds_session = authenticate_and_fetch_profile(@migration.old_pds_host, @migration.old_handle, user_password)
 
       # Generate a secure random password for the new account
       # This will be emailed to the user after migration completes (NOT immediately)
@@ -288,9 +290,9 @@ class MigrationsController < ApplicationController
       @migration.password = new_account_password  # Lockbox encrypts this
       @migration.credentials_expires_at = 48.hours.from_now
 
-      # Store old PDS tokens (encrypted via Lockbox) instead of the user's password
-      @migration.old_access_token = old_pds_session[:access_token]
-      @migration.old_refresh_token = old_pds_session[:refresh_token]
+      # Store old PDS tokens (encrypted via Lockbox)
+      @migration.old_access_token = old_access_token
+      @migration.old_refresh_token = old_refresh_token
 
       # Track password generation time (for auditing), but NOT the password itself
       @migration.progress_data ||= {}
@@ -311,10 +313,6 @@ class MigrationsController < ApplicationController
       else
         render :new, status: :unprocessable_entity
       end
-    rescue AuthenticationError => e
-      Rails.logger.error("Authentication failed during migration creation for #{@migration.old_handle}: #{e.message}")
-      @migration.errors.add(:base, "Authentication failed. Please check your password and try again.")
-      render :new, status: :unprocessable_entity
     rescue GoatService::NetworkError => e
       Rails.logger.error("Failed to resolve handle #{@migration.old_handle}: #{e.message}")
       @migration.errors.add(:old_handle, "could not be resolved. Please check that the handle is correct and try again.")
@@ -555,34 +553,6 @@ class MigrationsController < ApplicationController
                 alert: "Failed to retry migration. Please try again."
   end
 
-  # POST /migrate/:token/cancel
-  # Cancel a migration in progress
-  #
-  # Requirements:
-  #   - Migration must not be in PLC or activation stage
-  #   - Migration must not be already completed or failed
-  #
-  # Response:
-  #   - Success: Redirects to status page with notice
-  #   - Failure: Redirects to status page with alert
-  def cancel
-    unless @migration.can_cancel?
-      redirect_to migration_by_token_path(@migration.token),
-                  alert: "Migration cannot be cancelled at this stage"
-      return
-    end
-
-    @migration.cancel!
-
-    Rails.logger.info("Migration #{@migration.token} cancelled by user")
-    redirect_to migration_by_token_path(@migration.token),
-                notice: "Migration cancelled successfully"
-  rescue StandardError => e
-    Rails.logger.error("Failed to cancel migration #{@migration.token}: #{e.message}")
-    redirect_to migration_by_token_path(@migration.token),
-                alert: "Failed to cancel migration: #{e.message}"
-  end
-
   # POST /migrate/:token/retry_failed_blobs
   # Retry only the blobs that failed during the initial transfer
   #
@@ -777,7 +747,7 @@ class MigrationsController < ApplicationController
   end
 
   # Strong parameters for migration creation
-  # The password, invite_code, old_pds_host, and did are handled separately and not mass-assigned
+  # The old_access_token, old_refresh_token, invite_code, old_pds_host, and did are handled separately and not mass-assigned
   # old_pds_host and did are automatically resolved from the old_handle
   def migration_params
     allowed = [:email, :old_handle, :new_handle, :create_backup_bundle]
@@ -785,8 +755,11 @@ class MigrationsController < ApplicationController
     # Add new_pds_host only in standalone mode
     allowed << :new_pds_host if EuroskyConfig.standalone_mode?
 
-    # Note: invite_code and password are handled separately for encryption
-    # They are not mass-assigned through permit
+    # Include tokens and invite_code in permitted params to avoid unpermitted parameter warnings
+    # These are accessed directly in the create action (not mass-assigned) for encryption handling
+    allowed << :old_access_token
+    allowed << :old_refresh_token
+    allowed << :invite_code if EuroskyConfig.invite_code_enabled?
 
     params.require(:migration).permit(*allowed)
   end
