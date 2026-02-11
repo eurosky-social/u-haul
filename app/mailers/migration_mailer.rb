@@ -53,18 +53,6 @@ class MigrationMailer < ApplicationMailer
     )
   end
 
-  def plc_otp(migration, otp)
-    @migration = migration
-    @otp = otp
-    @migration_url = migration_by_token_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))
-    @expires_in = '15 minutes'
-
-    mail(
-      to: migration.email,
-      subject: "PLC Verification Code: #{otp} (#{migration.token})"
-    )
-  end
-
   def email_verification(migration)
     @migration = migration
     @verification_url = verify_email_url(token: migration.token, verification_token: migration.email_verification_token, host: ENV.fetch('DOMAIN', 'localhost:3001'))

@@ -320,13 +320,16 @@
             Your account data has been successfully migrated. Now you need to update your DID document to point to your new PDS.
           </p>
 
-          <ol>
-            <li>Go to <a href="https://plc.directory" target="_blank" rel="noopener">plc.directory</a></li>
-            <li>Enter your DID: <code style="background: rgba(255,255,255,0.8); padding: 2px 6px; border-radius: 3px;"><%= @migration.did %></code></li>
-            <li>Click "Request a PLC operation token"</li>
-            <li>Check your email for the token</li>
-            <li>Enter the token below and submit</li>
-          </ol>
+          <p style="margin-bottom: 16px; color: #856404; font-size: 14px;">
+            A PLC operation token has been requested from your old PDS provider (<strong><%= @migration.old_pds_host %></strong>).
+            Check your email for the token, then enter it below.
+          </p>
+
+          <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+            <p style="margin: 0; color: #92400e; font-size: 13px;">
+              ⏰ <strong>Important:</strong> PLC tokens expire after 1 hour. If your token has expired, you can request a new one from your migration status page.
+            </p>
+          </div>
 
           <%= form_with url: submit_plc_token_by_token_path(@migration.token), method: :post, local: true do |f| %>
             <div class="form-group">
@@ -404,25 +407,7 @@
       <% end %>
 
       <% if @migration.failed? %>
-        <div class="error-message" role="alert">
-          <h3>Migration Failed</h3>
-          <% if @migration.last_error %>
-            <pre><%= @migration.last_error %></pre>
-          <% else %>
-            <p style="color: #991b1b; font-size: 14px;">An unknown error occurred during migration.</p>
-          <% end %>
-
-          <div style="margin-top: 20px;">
-            <%= button_to "Retry Migration", retry_migration_by_token_path(@migration.token),
-                method: :post,
-                style: "background-color: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; font-weight: 500; cursor: pointer; margin-right: 12px;",
-                data: { confirm: "This will retry the migration from where it failed. Continue?" } %>
-          </div>
-
-          <p style="margin-top: 12px; color: #991b1b; font-size: 14px;">
-            If the problem persists after retrying, please contact support with your migration token: <strong><%= @migration.token %></strong>
-          </p>
-        </div>
+        <%= render 'migrations/error_details', migration: @migration %>
       <% end %>
 
       <% unless @migration.completed? || @migration.failed? %>

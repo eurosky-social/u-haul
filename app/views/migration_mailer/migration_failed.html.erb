@@ -42,19 +42,39 @@
     </ul>
   </div>
 
-  <h3>What You Can Do:</h3>
-  <ol>
-    <li>Review the migration status and click the "Retry Migration" button:</li>
-  </ol>
+  <% if @error_message&.match?(/PLC token.*expired/i) %>
+    <h3>PLC Token Expired</h3>
+    <p>Your PLC operation token has expired. PLC tokens are only valid for 1 hour after they are issued.</p>
 
-  <a href="<%= @migration_url %>" class="button">View Migration & Retry</a>
+    <h4>What You Need to Do:</h4>
+    <ol>
+      <li>Visit your migration status page using the button below</li>
+      <li>Click the "Request New PLC Token" button</li>
+      <li>Check your email from <strong><%= @migration.old_pds_host %></strong> for the new token</li>
+      <li>Submit the new token within 1 hour</li>
+    </ol>
 
-  <p><strong>Common Issues and Solutions:</strong></p>
-  <ul>
-    <li><strong>Network timeouts:</strong> Usually resolve on retry</li>
-    <li><strong>Rate limiting:</strong> Wait a few minutes before retrying</li>
-    <li><strong>Missing data:</strong> Check if all data is accessible on the old PDS</li>
-  </ul>
+    <a href="<%= @migration_url %>" class="button">View Migration & Request New Token</a>
+
+    <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0;">
+      <p style="margin: 0;"><strong>Good News:</strong></p>
+      <p style="margin: 5px 0 0 0;">Your migration data is safe and ready. You just need a fresh PLC token to complete the final step.</p>
+    </div>
+  <% else %>
+    <h3>What You Can Do:</h3>
+    <ol>
+      <li>Review the migration status and click the "Retry Migration" button:</li>
+    </ol>
+
+    <a href="<%= @migration_url %>" class="button">View Migration & Retry</a>
+
+    <p><strong>Common Issues and Solutions:</strong></p>
+    <ul>
+      <li><strong>Network timeouts:</strong> Usually resolve on retry</li>
+      <li><strong>Rate limiting:</strong> Wait a few minutes before retrying</li>
+      <li><strong>Missing data:</strong> Check if all data is accessible on the old PDS</li>
+    </ul>
+  <% end %>
 
   <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
     <p style="margin: 0;"><strong>Important:</strong></p>

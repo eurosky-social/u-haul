@@ -535,7 +535,8 @@ class MigrationJobsErrorTest < ActiveSupport::TestCase
 
     @migration.reload
     assert @migration.failed?
-    assert @migration.last_error.include?("PLC token is missing or expired")
+    assert @migration.last_error.include?("PLC token has expired")
+    assert @migration.last_error.include?("Please request a new token")
   end
 
   test "UpdatePlcJob handles PLC operation signing failure" do

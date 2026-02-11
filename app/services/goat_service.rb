@@ -619,7 +619,8 @@ class GoatService
     login_old_pds
 
     # Request PLC operation signature token via email
-    old_pds_client.post_request('com.atproto.identity.requestPlcOperationSignature', {})
+    # Note: This endpoint doesn't accept a request body, so we don't pass the data parameter
+    old_pds_client.post_request('com.atproto.identity.requestPlcOperationSignature')
 
     logger.info("PLC token requested (check email or logs)")
 

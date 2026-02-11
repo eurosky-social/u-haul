@@ -55,7 +55,15 @@ class UpdatePlcJob < ApplicationJob
     # Step 1: Validate PLC token is present and not expired
     plc_token = migration.plc_token
     if plc_token.nil?
-      error_msg = "PLC token is missing or expired (credentials_expires_at: #{migration.credentials_expires_at})"
+      error_msg = "PLC token is missing"
+      Rails.logger.error(error_msg)
+      migration.mark_failed!(error_msg)
+      raise GoatService::AuthenticationError, error_msg
+    end
+
+    # Check if credentials (including PLC token) have expired
+    if migration.credentials_expired?
+      error_msg = "PLC token has expired (expired at: #{migration.credentials_expires_at}). Please request a new token."
       Rails.logger.error(error_msg)
       migration.mark_failed!(error_msg)
       raise GoatService::AuthenticationError, error_msg

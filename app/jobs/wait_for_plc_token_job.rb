@@ -35,24 +35,17 @@ class WaitForPlcTokenJob < ApplicationJob
       return
     end
 
-    # Request PLC token from old PDS (sends email to user)
+    # Request PLC token from old PDS (sends email to user from their old provider)
     begin
       service = GoatService.new(migration)
       service.request_plc_token
 
-      # Generate OTP for PLC submission verification
-      otp = migration.generate_plc_otp!(expires_in: 15.minutes)
-
-      # Send OTP via email
-      MigrationMailer.plc_otp(migration, otp).deliver_later
-      Rails.logger.info("PLC OTP sent to #{migration.email} for migration #{migration.token}")
-
       # Update progress to indicate token was requested
       migration.progress_data['plc_token_requested_at'] = Time.current.iso8601
-      migration.progress_data['plc_otp_sent_at'] = Time.current.iso8601
       migration.save!
 
-      Rails.logger.info("PLC token request sent for migration #{migration.token}")
+      Rails.logger.info("PLC token request sent to old PDS for migration #{migration.token}")
+      Rails.logger.info("User will receive PLC token via email from #{migration.old_pds_host}")
     rescue StandardError => e
       Rails.logger.error("Failed to request PLC token for migration #{migration.token}: #{e.message}")
       migration.mark_failed!("Failed to request PLC token: #{e.message}")

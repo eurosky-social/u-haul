@@ -48,6 +48,8 @@ module MigrationErrorHelper
       :rate_limit
     when /network|timeout|connection|unreachable/i
       :network
+    when /PLC token.*expired|PLC token has expired/i
+      :plc_token_expired
     when /authentication|unauthorized|401|invalid password/i
       :authentication
     when /already exists|AlreadyExists|orphaned/i
@@ -76,6 +78,8 @@ module MigrationErrorHelper
       rate_limit_context(migration, retry_attempt, max_attempts)
     when :network
       network_context(migration, retry_attempt, max_attempts)
+    when :plc_token_expired
+      plc_token_expired_context(migration)
     when :authentication
       authentication_context(migration)
     when :account_exists
@@ -201,6 +205,27 @@ module MigrationErrorHelper
       migration_token: migration.token,
       help_link: "/docs/troubleshooting#orphaned-accounts",
       did: migration.did
+    }
+  end
+
+  def self.plc_token_expired_context(migration)
+    {
+      severity: :warning,
+      icon: "⏰",
+      title: "PLC Token Expired",
+      what_happened: "The PLC operation token you submitted has expired. PLC tokens are only valid for 1 hour after they are issued by your old PDS provider.",
+      current_status: "Migration paused - new PLC token required",
+      what_to_do: [
+        "Click the 'Request New PLC Token' button below to request a fresh token",
+        "Check your email from #{migration.old_pds_host} for the new token",
+        "Submit the new token within 1 hour of receiving it",
+        "The rest of your migration data is safe and ready - you just need a fresh token"
+      ],
+      show_retry_button: false,
+      show_request_new_plc_token: true,
+      help_link: "/docs/troubleshooting#plc-token-expiration",
+      expired_at: migration.credentials_expires_at,
+      old_pds_host: migration.old_pds_host
     }
   end
 

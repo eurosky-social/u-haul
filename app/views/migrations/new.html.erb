@@ -410,7 +410,8 @@
             wizardData.emailReadonly = false;
           }
 
-          // Store authentication tokens (will be submitted with form)
+          // Store DID and authentication tokens (will be submitted with form)
+          wizardData.did = data.did;
           wizardData.accessToken = data.access_token;
           wizardData.refreshToken = data.refresh_token;
 
@@ -507,9 +508,17 @@
       document.getElementById('step3-next').addEventListener('click', function(e) {
         e.preventDefault();
 
-        const selectedPds = pdsSelect.value || customPdsField.value.trim();
-        if (!selectedPds) {
-          alert('Please select a PDS');
+        const btn = e.target;
+        const status = document.getElementById('pds-status');
+        let selectedPds = pdsSelect.value;
+
+        // If "custom" is selected, use the custom PDS field value
+        if (selectedPds === 'custom') {
+          selectedPds = customPdsField.value.trim();
+        }
+
+        if (!selectedPds || selectedPds === 'custom') {
+          alert('Please select a PDS or enter a custom PDS URL');
           return;
         }
 
@@ -519,6 +528,7 @@
           return;
         }
 
+        // All checks passed, store PDS and proceed to step 4
         wizardData.pdsHost = selectedPds;
         showStep(4);
         setupStep4();
@@ -748,15 +758,78 @@
             return;
           }
 
-          showStatus(status, 'Handle is available!', 'success');
+          // Handle is available, now check if DID already has an account on the target PDS
+          showStatus(status, 'Handle available, checking for orphaned accounts...', 'info');
+          btn.disabled = true;
+          btn.textContent = 'Checking for orphaned accounts...';
 
-          // Store in hidden field and proceed
-          document.getElementById('migration_new_handle').value = fullHandle;
+          fetch('/migrations/check_did_on_pds', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({
+              did: wizardData.did,
+              pds_host: wizardData.pdsHost
+            })
+          })
+          .then(response => response.json())
+          .then(didData => {
+            btn.disabled = false;
+            btn.textContent = 'Continue';
 
-          setTimeout(() => {
-            showStep(5);
-            setupStep5();
-          }, 500);
+            if (didData.error) {
+              showStatus(status, didData.error, 'error');
+              return;
+            }
+
+            if (didData.exists) {
+              // Build detailed error message with support contact information
+              const supportEmail = didData.support_email || 'support@example.com';
+              const errorMessage = `
+                <div style="text-align: left; line-height: 1.6;">
+                  <strong>👥 Account Already Exists on Target PDS</strong><br><br>
+                  <strong>What happened:</strong><br>
+                  An account with your DID already exists on the target PDS (${wizardData.pdsHost}).
+                  This orphaned account is likely from a previous failed migration attempt.<br><br>
+
+                  <strong>What to do:</strong><br>
+                  📧 Contact the target PDS provider to remove the orphaned account:<br>
+                  <div style="margin-left: 20px;">
+                    • Email: <strong>${supportEmail}</strong><br>
+                    • Include your DID: <code style="background: #f0f0f0; padding: 2px 4px;">${wizardData.did}</code><br>
+                    • Include your old handle: <strong>${wizardData.oldHandle || wizardData.identifier}</strong><br>
+                    ${didData.deactivated ? '• Mention the account is <strong>deactivated/orphaned</strong><br>' : ''}
+                  </div><br>
+
+                  ⚠️ <strong>This requires action from the PDS provider - you cannot fix this yourself.</strong><br>
+                  Once the orphaned account is removed, you can retry this migration.
+                </div>
+              `;
+
+              status.className = 'status-message error';
+              status.innerHTML = errorMessage;
+              status.style.display = 'block';
+              return;
+            }
+
+            // All checks passed - handle is available and no orphaned account
+            showStatus(status, 'All checks passed!', 'success');
+
+            // Store in hidden field and proceed
+            document.getElementById('migration_new_handle').value = fullHandle;
+
+            setTimeout(() => {
+              showStep(5);
+              setupStep5();
+            }, 500);
+          })
+          .catch(didError => {
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+            showStatus(status, 'Failed to check for orphaned accounts: ' + didError.message, 'error');
+          });
         })
         .catch(error => {
           btn.disabled = false;
@@ -785,13 +858,13 @@
         showStep(4);
       });
 
-      // Prevent form submission via Enter key on intermediate steps
+      // Handle form submission
       form.addEventListener('submit', function(event) {
         event.preventDefault();
 
         // Only allow form submission if we're on the final step (step 5)
         const currentStep = document.querySelector('.wizard-step.active');
-        if (!currentStep || currentStep.id !== 'step5') {
+        if (!currentStep || currentStep.id !== 'step-5') {
           // User pressed Enter on an intermediate step - do nothing
           return;
         }
@@ -799,6 +872,7 @@
         // Check if user has acknowledged the no-usage warning
         const acknowledgeCheckbox = document.getElementById('acknowledge-no-usage');
         if (!acknowledgeCheckbox.checked) {
+          alert('Please confirm that you understand you must not use your account during migration.');
           acknowledgeCheckbox.focus();
           return;
         }

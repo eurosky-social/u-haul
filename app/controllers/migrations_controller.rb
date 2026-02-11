@@ -27,7 +27,7 @@
 #   GET  /migrations/:id/status (JSON only)
 
 class MigrationsController < ApplicationController
-  before_action :set_migration, only: [:show, :verify_email, :submit_plc_token, :status, :download_backup, :retry, :cancel, :export_recovery_data, :retry_failed_blobs]
+  before_action :set_migration, only: [:show, :verify_email, :submit_plc_token, :request_new_plc_token, :status, :download_backup, :retry, :export_recovery_data, :retry_failed_blobs]
   before_action :set_security_headers
 
   # GET /migrations/new
@@ -38,6 +38,69 @@ class MigrationsController < ApplicationController
     # Pre-populate new_pds_host in bound mode
     if EuroskyConfig.bound_mode?
       @migration.new_pds_host = EuroskyConfig::TARGET_PDS_HOST
+    end
+  end
+
+  # POST /migrations/check_did_on_pds
+  # Check if a DID already has an account on a PDS (orphaned account check)
+  #
+  # Params:
+  #   - did: DID to check
+  #   - pds_host: PDS host URL
+  #
+  # Response:
+  #   - Success: { exists: true/false, deactivated: true/false (if exists) }
+  #   - Failure: { error: 'message' }
+  def check_did_on_pds
+    did = params[:did]&.strip
+    pds_host = params[:pds_host]&.strip
+
+    if did.blank?
+      render json: { error: 'DID is required' }, status: :bad_request
+      return
+    end
+
+    if pds_host.blank?
+      render json: { error: 'PDS host is required' }, status: :bad_request
+      return
+    end
+
+    # Normalize PDS host
+    pds_host = normalize_pds_host(pds_host)
+
+    # Check if repo exists on the PDS
+    begin
+      url = "#{pds_host}/xrpc/com.atproto.repo.describeRepo"
+      Rails.logger.info("Checking if DID #{did} exists on PDS: #{url}?repo=#{did}")
+      response = HTTParty.get(url, query: { repo: did }, timeout: 10)
+
+      Rails.logger.info("PDS DID check response: #{response.code} - #{response.body[0..200]}")
+
+      if response.success?
+        # Active repo exists
+        Rails.logger.info("DID #{did} has active repo on #{pds_host}")
+        support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
+        render json: { exists: true, deactivated: false, support_email: support_email }
+      elsif response.code == 400
+        parsed = JSON.parse(response.body) rescue {}
+        if parsed['error'] == 'RepoDeactivated'
+          # Deactivated/orphaned repo exists
+          Rails.logger.info("DID #{did} has deactivated repo on #{pds_host}")
+          support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
+          render json: { exists: true, deactivated: true, support_email: support_email }
+        else
+          # DID doesn't exist
+          Rails.logger.info("DID #{did} does not exist on #{pds_host}")
+          render json: { exists: false }
+        end
+      else
+        # DID doesn't exist
+        Rails.logger.info("DID #{did} does not exist on #{pds_host}")
+        render json: { exists: false }
+      end
+    rescue StandardError => e
+      Rails.logger.error("Error checking DID on PDS: #{e.message}")
+      render json: { error: "Failed to check PDS" }, status: :internal_server_error
     end
   end
 
@@ -68,23 +131,43 @@ class MigrationsController < ApplicationController
     # Normalize PDS host
     pds_host = normalize_pds_host(pds_host)
 
-    # Try to resolve the handle
+    # Check 1: Try to resolve the handle via PLC directory
     begin
       resolution = GoatService.resolve_handle(handle)
-      # Handle exists - check if it's on a different PDS
+      # Handle exists in PLC - check if it's on a different PDS
       if resolution[:pds_host] == pds_host
-        # Handle exists on this PDS - not available
+        # Handle exists on this PDS in PLC - not available
+        render json: { available: false }
+        return
+      end
+      # Handle exists on different PDS in PLC - continue to check actual PDS
+    rescue GoatService::NetworkError
+      # Handle doesn't exist in PLC - continue to check actual PDS
+    end
+
+    # Check 2: Query the target PDS directly to check for orphaned accounts
+    # This catches accounts that exist in the PDS database but aren't in PLC yet
+    begin
+      url = "#{pds_host}/xrpc/com.atproto.identity.resolveHandle"
+      Rails.logger.info("Checking handle availability on PDS: #{url}?handle=#{handle}")
+      response = HTTParty.get(url, query: { handle: handle }, timeout: 10)
+
+      Rails.logger.info("PDS handle check response: #{response.code} - #{response.body[0..200]}")
+
+      if response.success?
+        # Handle exists on the PDS - not available
+        Rails.logger.info("Handle #{handle} exists on #{pds_host} - not available")
         render json: { available: false }
       else
-        # Handle exists on different PDS - available on this PDS
+        # Handle doesn't exist on the PDS - available
+        Rails.logger.info("Handle #{handle} does not exist on #{pds_host} - available")
         render json: { available: true }
       end
-    rescue GoatService::NetworkError
-      # Handle doesn't exist - available
-      render json: { available: true }
     rescue StandardError => e
-      Rails.logger.error("Error checking handle availability: #{e.message}")
-      render json: { error: "Failed to check handle availability" }, status: :internal_server_error
+      Rails.logger.error("Error checking handle on PDS: #{e.message}")
+      Rails.logger.error(e.backtrace.join("\n"))
+      # If we can't check the PDS, assume it's available (fail open)
+      render json: { available: true }
     end
   end
 
@@ -379,7 +462,6 @@ class MigrationsController < ApplicationController
   #   - Failure: Redirects to status page with error message
   def submit_plc_token
     plc_token = params[:plc_token]
-    plc_otp = params[:plc_otp]
 
     if plc_token.blank?
       Rails.logger.warn("PLC token submission failed for migration #{@migration.token}: Token blank")
@@ -388,25 +470,9 @@ class MigrationsController < ApplicationController
       return
     end
 
-    if plc_otp.blank?
-      Rails.logger.warn("PLC token submission failed for migration #{@migration.token}: OTP blank")
-      redirect_to migration_by_token_path(@migration.token),
-                  alert: "Verification code (OTP) is required"
-      return
-    end
-
-    # Verify OTP with rate limiting
-    verification = @migration.verify_plc_otp(plc_otp)
-    unless verification[:valid]
-      Rails.logger.warn("PLC OTP verification failed for migration #{@migration.token}: #{verification[:error]}")
-      redirect_to migration_by_token_path(@migration.token),
-                  alert: "Verification failed: #{verification[:error]}"
-      return
-    end
-
     # Store the encrypted PLC token with expiration
     @migration.set_plc_token(plc_token)
-    Rails.logger.info("PLC token accepted for migration #{@migration.token} after successful OTP verification")
+    Rails.logger.info("PLC token accepted for migration #{@migration.token}")
 
     # Trigger the critical UpdatePlcJob to update the PLC directory
     UpdatePlcJob.perform_later(@migration.id)
@@ -417,6 +483,44 @@ class MigrationsController < ApplicationController
     Rails.logger.error("Failed to submit PLC token for migration #{@migration.token}: #{e.message}")
     redirect_to migration_by_token_path(@migration.token),
                 alert: "Failed to submit PLC token. Please try again."
+  end
+
+  # POST /migrations/:id/request_new_plc_token
+  # POST /migrate/:token/request_new_plc_token
+  # Request a new PLC token from the old PDS provider
+  def request_new_plc_token
+    unless @migration.status == 'pending_plc' || (@migration.failed? && @migration.last_error&.include?('PLC token'))
+      Rails.logger.warn("PLC token request failed for migration #{@migration.token}: Not in correct status")
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "Cannot request a new PLC token at this stage"
+      return
+    end
+
+    begin
+      # Request a new PLC token from the old PDS
+      service = GoatService.new(@migration)
+      service.request_plc_token
+
+      # Update progress to indicate token was requested
+      @migration.progress_data ||= {}
+      @migration.progress_data['plc_token_requested_at'] = Time.current.iso8601
+      @migration.progress_data['plc_token_resent'] = true
+      @migration.save!
+
+      # If migration was failed due to expired token, reset to pending_plc
+      if @migration.failed? && @migration.last_error&.include?('expired')
+        @migration.update!(status: 'pending_plc', last_error: nil)
+        Rails.logger.info("Reset migration #{@migration.token} to pending_plc after PLC token resend")
+      end
+
+      Rails.logger.info("PLC token resend requested for migration #{@migration.token}")
+      redirect_to migration_by_token_path(@migration.token),
+                  notice: "A new PLC token has been requested. Check your email from #{@migration.old_pds_host}."
+    rescue StandardError => e
+      Rails.logger.error("Failed to request new PLC token for migration #{@migration.token}: #{e.message}")
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: "Failed to request a new PLC token. Please try again."
+    end
   end
 
   # GET /migrations/:id/status
@@ -486,36 +590,6 @@ class MigrationsController < ApplicationController
   # Response:
   #   - Success: Redirects to status page with notice
   #   - Failure: Redirects to status page with alert
-  def resend_plc_otp
-    unless @migration.status == 'pending_plc'
-      Rails.logger.warn("OTP resend request failed for migration #{@migration.token}: Not in pending_plc status")
-      redirect_to migration_by_token_path(@migration.token),
-                  alert: "OTP can only be resent when waiting for PLC token submission"
-      return
-    end
-
-    # Rate limiting: Check last OTP send time
-    last_sent = @migration.plc_otp_expires_at
-    if last_sent && last_sent > 13.minutes.ago
-      time_remaining = ((last_sent - 13.minutes.ago) / 60).ceil
-      Rails.logger.warn("OTP resend rate limited for migration #{@migration.token}: #{time_remaining} minutes remaining")
-      redirect_to migration_by_token_path(@migration.token),
-                  alert: "Please wait #{time_remaining} more minute(s) before requesting a new code"
-      return
-    end
-
-    # Generate and send new OTP
-    otp = @migration.generate_plc_otp!(expires_in: 15.minutes)
-    MigrationMailer.plc_otp(@migration, otp).deliver_later
-
-    Rails.logger.info("PLC OTP resent for migration #{@migration.token}")
-    redirect_to migration_by_token_path(@migration.token),
-                notice: "A new verification code has been sent to #{@migration.email}"
-  rescue StandardError => e
-    Rails.logger.error("Failed to resend PLC OTP for migration #{@migration.token}: #{e.message}")
-    redirect_to migration_by_token_path(@migration.token),
-                alert: "Failed to resend verification code. Please try again."
-  end
 
   # POST /migrate/:token/retry
   # Retry a failed migration from the current step

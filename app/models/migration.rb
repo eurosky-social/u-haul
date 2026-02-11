@@ -280,46 +280,6 @@ class Migration < ApplicationRecord
     save!
   end
 
-  # Generate and store OTP for PLC submission (6-digit code)
-  def generate_plc_otp!(expires_in: 15.minutes)
-    otp = SecureRandom.random_number(1_000_000).to_s.rjust(6, '0')
-    self.plc_otp = otp  # Lockbox handles encryption automatically
-    self.plc_otp_expires_at = expires_in.from_now
-    self.plc_otp_attempts ||= 0
-    save!
-    Rails.logger.info("Generated PLC OTP for migration #{token} (expires at #{plc_otp_expires_at})")
-    otp
-  end
-
-  # Verify PLC OTP with rate limiting (max 5 attempts)
-  def verify_plc_otp(submitted_otp)
-    # Check if OTP has expired
-    if plc_otp_expires_at.nil? || plc_otp_expires_at < Time.current
-      Rails.logger.warn("PLC OTP verification failed for migration #{token}: OTP expired")
-      return { valid: false, error: 'OTP has expired. Please request a new one.' }
-    end
-
-    # Check attempt limit
-    if plc_otp_attempts >= 5
-      Rails.logger.warn("PLC OTP verification failed for migration #{token}: Too many attempts")
-      return { valid: false, error: 'Too many failed attempts. Please request a new OTP.' }
-    end
-
-    # Increment attempts
-    increment!(:plc_otp_attempts)
-
-    # Verify OTP
-    if plc_otp == submitted_otp.to_s.strip
-      Rails.logger.info("PLC OTP verified successfully for migration #{token}")
-      # Clear OTP after successful verification
-      update!(encrypted_plc_otp: nil, plc_otp_expires_at: nil, plc_otp_attempts: 0)
-      return { valid: true }
-    else
-      Rails.logger.warn("PLC OTP verification failed for migration #{token}: Invalid code (attempt #{plc_otp_attempts}/5)")
-      return { valid: false, error: "Invalid OTP. #{5 - plc_otp_attempts} attempts remaining." }
-    end
-  end
-
   def credentials_expired?
     credentials_expires_at.nil? || credentials_expires_at < Time.current
   end

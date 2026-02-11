@@ -32,8 +32,7 @@
     <ul style="color: #92400e; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
       <li><strong>Your rotation key saved securely</strong> (scroll up to copy it)</li>
       <li><strong>Verified all your data migrated</strong> (repository, blobs, preferences)</li>
-      <li><strong>The PLC operation token</strong> (you'll request this from plc.directory)</li>
-      <li><strong>Verification code</strong> (sent to your email)</li>
+      <li><strong>The PLC operation token</strong> (will be sent to your email from <%= @migration.old_pds_host %>)</li>
       <li><strong>Understanding this is irreversible</strong> without the rotation key</li>
     </ul>
   </div>
@@ -59,49 +58,31 @@
       <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 16px;">
         <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">2</div>
         <div style="flex: 1;">
-          <strong style="color: #1f2937; font-size: 15px;">Visit PLC Directory</strong>
-          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 8px 0;">
-            Go to <a href="https://plc.directory" target="_blank" rel="noopener" style="color: #3b82f6; text-decoration: none; font-weight: 600;">plc.directory</a> in a new tab
+          <strong style="color: #1f2937; font-size: 15px;">Check Your Email</strong>
+          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 0 0;">
+            Your old PDS provider (<strong><%= @migration.old_pds_host %></strong>) has been asked to send you a PLC operation token via email.
+            Check your inbox for an email containing the token.
           </p>
-          <a href="https://plc.directory" target="_blank" rel="noopener" style="display: inline-block; padding: 8px 16px; background: #3b82f6; color: white; border-radius: 4px; text-decoration: none; font-size: 13px; font-weight: 600;">
-            Open PLC Directory →
-          </a>
         </div>
       </div>
 
       <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 16px;">
         <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">3</div>
         <div style="flex: 1;">
-          <strong style="color: #1f2937; font-size: 15px;">Enter Your DID</strong>
-          <p style="color: #6b7280; font-size: 14px; margin: 4px 0 8px 0;">
-            Copy and paste your DID into the PLC directory:
-          </p>
-          <div style="background: #f3f4f6; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-            <code id="did-display" style="overflow-wrap: break-word; word-break: break-all;"><%= @migration.did %></code>
-            <button onclick="navigator.clipboard.writeText('<%= @migration.did %>'); this.textContent='✅'; setTimeout(() => this.textContent='📋', 2000)"
-                    style="padding: 6px 12px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; flex-shrink: 0;">
-              📋
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div style="display: flex; align-items: start; gap: 12px; margin-bottom: 16px;">
-        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">4</div>
-        <div style="flex: 1;">
-          <strong style="color: #1f2937; font-size: 15px;">Request PLC Operation Token</strong>
+          <strong style="color: #1f2937; font-size: 15px;">Copy the PLC Token</strong>
           <p style="color: #6b7280; font-size: 14px; margin: 4px 0 0 0;">
-            Click "Request a PLC operation token" on plc.directory and check your email for the token.
+            Copy the PLC operation token from the email sent by your old PDS provider.
+            The token will look like a long string of characters.
           </p>
         </div>
       </div>
 
       <div style="display: flex; align-items: start; gap: 12px;">
-        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">5</div>
+        <div style="background: linear-gradient(135deg, <%= EuroskyConfig::PRIMARY_COLOR %> 0%, <%= EuroskyConfig::SECONDARY_COLOR %> 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0;">4</div>
         <div style="flex: 1;">
-          <strong style="color: #1f2937; font-size: 15px;">Submit Below</strong>
+          <strong style="color: #1f2937; font-size: 15px;">Submit the Token Below</strong>
           <p style="color: #6b7280; font-size: 14px; margin: 4px 0 0 0;">
-            Enter both the PLC token and the verification code from your email, then submit.
+            Paste the PLC token in the form below and submit to complete your migration.
           </p>
         </div>
       </div>

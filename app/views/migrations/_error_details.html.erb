@@ -73,6 +73,13 @@
 
           <%# Action Buttons %>
           <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <% if error_context[:show_request_new_plc_token] %>
+              <%= link_to "📧 Request New PLC Token", request_new_plc_token_by_token_path(@migration.token),
+                  method: :post,
+                  data: { confirm: "Request a new PLC token from your old PDS provider?" },
+                  style: "padding: 10px 20px; background: linear-gradient(135deg, #{EuroskyConfig::PRIMARY_COLOR} 0%, #{EuroskyConfig::SECONDARY_COLOR} 100%); color: white; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;" %>
+            <% end %>
+
             <% if error_context[:show_retry_button] %>
               <%= link_to "🔄 Retry Migration", retry_migration_by_token_path(@migration.token),
                   method: :post,
