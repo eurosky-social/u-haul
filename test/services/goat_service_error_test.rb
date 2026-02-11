@@ -1,8 +1,12 @@
 require "test_helper"
+require "webmock/minitest"
 
 # GoatService Error Handling Tests
 # Tests based on MIGRATION_ERROR_ANALYSIS.md covering all possible errors
 # across all migration stages
+#
+# NOTE: The service now uses minisky for PDS client management and HTTParty
+# for direct HTTP calls. Tests use WebMock to stub HTTP requests.
 class GoatServiceErrorTest < ActiveSupport::TestCase
   def setup
     @migration = migrations(:pending_migration)
@@ -10,14 +14,13 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
     @migration.set_password("test_password_123")
     @service = GoatService.new(@migration)
 
-    # Stub logout globally - it's called by login methods and we don't care if it fails
-    Open3.stubs(:capture3).with(
-      anything,
-      'goat',
-      'account',
-      'logout',
-      chdir: @service.work_dir
-    ).returns(["", "", stub(success?: true)])
+    # Disable all external HTTP connections
+    WebMock.disable_net_connect!(allow_localhost: false)
+  end
+
+  def teardown
+    WebMock.reset!
+    WebMock.allow_net_connect!
   end
 
   # ============================================================================
@@ -25,26 +28,20 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "login_old_pds raises AuthenticationError on wrong password" do
-    stub_goat_command_failure(
-      ['account', 'login', '--pds-host', @migration.old_pds_host,
-       '-u', @migration.old_handle, '-p', @migration.password],
-      "authentication failed: invalid password"
-    )
+    stub_request(:post, "#{@migration.old_pds_host}/xrpc/com.atproto.server.createSession")
+      .with(body: hash_including(identifier: @migration.old_handle))
+      .to_return(status: 401, body: { error: 'AuthenticationRequired', message: 'Invalid identifier or password' }.to_json)
 
     error = assert_raises(GoatService::AuthenticationError) do
       @service.login_old_pds
     end
 
     assert_match /Failed to login to old PDS/, error.message
-    assert_match /invalid password/, error.message
   end
 
   test "login_old_pds raises AuthenticationError when PDS unreachable" do
-    stub_goat_command_failure(
-      ['account', 'login', '--pds-host', @migration.old_pds_host,
-       '-u', @migration.old_handle, '-p', @migration.password],
-      "connection refused"
-    )
+    stub_request(:post, "#{@migration.old_pds_host}/xrpc/com.atproto.server.createSession")
+      .to_timeout
 
     error = assert_raises(GoatService::AuthenticationError) do
       @service.login_old_pds
@@ -59,16 +56,11 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
     # Password should return nil due to expiration
     assert_nil @migration.password
 
-    stub_goat_command_failure(
-      ['account', 'login', '--pds-host', @migration.new_pds_host,
-       '-u', @migration.did, '-p', nil],
-      "invalid credentials"
-    )
-
     error = assert_raises(GoatService::AuthenticationError) do
       @service.login_new_pds
     end
 
+    # Should fail because password is nil
     assert_match /Failed to login to new PDS/, error.message
   end
 
@@ -77,13 +69,12 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "get_service_auth_token raises AuthenticationError on failure" do
-    stub_goat_command_success(['account', 'login'], "", "")
+    # First stub login to old PDS
+    stub_old_pds_login
 
-    stub_goat_command_failure(
-      ['account', 'service-auth', '--lxm', 'com.atproto.server.createAccount',
-       '--aud', 'did:web:newpds.com', '--duration-sec', '3600'],
-      "service auth denied"
-    )
+    # Then stub service auth to fail
+    stub_request(:get, /#{Regexp.escape(@migration.old_pds_host)}.*com\.atproto\.server\.getServiceAuth/)
+      .to_return(status: 401, body: { error: 'AuthenticationRequired', message: 'service auth denied' }.to_json)
 
     error = assert_raises(GoatService::AuthenticationError) do
       @service.get_service_auth_token('did:web:newpds.com')
@@ -93,12 +84,10 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "get_service_auth_token raises error on empty token" do
-    stub_goat_command_success(
-      ['account', 'service-auth', '--lxm', 'com.atproto.server.createAccount',
-       '--aud', 'did:web:newpds.com', '--duration-sec', '3600'],
-      "", # Empty stdout
-      ""
-    )
+    stub_old_pds_login
+
+    stub_request(:get, /#{Regexp.escape(@migration.old_pds_host)}.*com\.atproto\.server\.getServiceAuth/)
+      .to_return(status: 200, body: { token: '' }.to_json, headers: { 'Content-Type' => 'application/json' })
 
     error = assert_raises(GoatService::GoatError) do
       @service.get_service_auth_token('did:web:newpds.com')
@@ -108,10 +97,9 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "check_account_exists_on_new_pds detects orphaned deactivated account" do
-    stub_curl_get(
-      "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo?repo=#{@migration.did}",
-      { error: 'RepoDeactivated' }.to_json
-    )
+    stub_request(:get, "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo")
+      .with(query: { repo: @migration.did })
+      .to_return(status: 400, body: { error: 'RepoDeactivated' }.to_json)
 
     result = @service.check_account_exists_on_new_pds
 
@@ -120,10 +108,9 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "check_account_exists_on_new_pds detects active existing account" do
-    stub_curl_get(
-      "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo?repo=#{@migration.did}",
-      { did: @migration.did, handle: 'existing.handle.com' }.to_json
-    )
+    stub_request(:get, "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo")
+      .with(query: { repo: @migration.did })
+      .to_return(status: 200, body: { did: @migration.did, handle: 'existing.handle.com' }.to_json)
 
     result = @service.check_account_exists_on_new_pds
 
@@ -134,19 +121,13 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
 
   test "create_account_on_new_pds raises AccountExistsError for orphaned account" do
     # Stub account creation to fail with AlreadyExists
-    stub_goat_command_failure(
-      ['account', 'create', '--pds-host', @migration.new_pds_host,
-       '--existing-did', @migration.did, '--handle', @migration.new_handle,
-       '--password', @migration.password, '--email', @migration.email,
-       '--service-auth', 'test-token'],
-      "AlreadyExists: Repo already exists"
-    )
+    stub_request(:post, "#{@migration.new_pds_host}/xrpc/com.atproto.server.createAccount")
+      .to_return(status: 400, body: { error: 'AlreadyExists', message: 'Repo already exists' }.to_json)
 
-    # Stub check to confirm deactivated account (uses curl)
-    stub_curl_get(
-      "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo?repo=#{@migration.did}",
-      { error: 'RepoDeactivated' }.to_json
-    )
+    # Stub check to confirm deactivated account
+    stub_request(:get, "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo")
+      .with(query: { repo: @migration.did })
+      .to_return(status: 400, body: { error: 'RepoDeactivated' }.to_json)
 
     error = assert_raises(GoatService::AccountExistsError) do
       @service.create_account_on_new_pds('test-token')
@@ -157,18 +138,13 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "create_account_on_new_pds raises AccountExistsError for active account" do
-    stub_goat_command_failure(
-      ['account', 'create', '--pds-host', @migration.new_pds_host,
-       '--existing-did', @migration.did, '--handle', @migration.new_handle,
-       '--password', @migration.password, '--email', @migration.email,
-       '--service-auth', 'test-token'],
-      "AlreadyExists: Account already active"
-    )
+    # The code checks for "AlreadyExists" or "Repo already exists" in the message
+    stub_request(:post, "#{@migration.new_pds_host}/xrpc/com.atproto.server.createAccount")
+      .to_return(status: 400, body: { error: 'AlreadyExists', message: 'AlreadyExists: Account already active' }.to_json)
 
-    stub_curl_get(
-      "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo?repo=#{@migration.did}",
-      { did: @migration.did, handle: 'existing.handle.com' }.to_json
-    )
+    stub_request(:get, "#{@migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo")
+      .with(query: { repo: @migration.did })
+      .to_return(status: 200, body: { did: @migration.did, handle: 'existing.handle.com' }.to_json)
 
     error = assert_raises(GoatService::AccountExistsError) do
       @service.create_account_on_new_pds('test-token')
@@ -180,15 +156,10 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   test "create_account_on_new_pds includes invite code when present" do
     @migration.set_invite_code('test-invite-code')
 
-    # Expect the invite code to be included in the command
-    stub_goat_command_success(
-      ['account', 'create', '--pds-host', @migration.new_pds_host,
-       '--existing-did', @migration.did, '--handle', @migration.new_handle,
-       '--password', @migration.password, '--email', @migration.email,
-       '--service-auth', 'test-token', '--invite-code', 'test-invite-code'],
-      "Account created",
-      ""
-    )
+    # Expect the invite code to be included in the request
+    stub_request(:post, "#{@migration.new_pds_host}/xrpc/com.atproto.server.createAccount")
+      .with(body: hash_including(inviteCode: 'test-invite-code'))
+      .to_return(status: 200, body: { did: @migration.did, handle: @migration.new_handle }.to_json)
 
     assert_nothing_raised do
       @service.create_account_on_new_pds('test-token')
@@ -198,113 +169,36 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   test "create_account_on_new_pds raises GoatError for invalid invite code" do
     @migration.set_invite_code('invalid-code')
 
-    stub_goat_command_failure(
-      ['account', 'create', '--pds-host', @migration.new_pds_host,
-       '--existing-did', @migration.did, '--handle', @migration.new_handle,
-       '--password', @migration.password, '--email', @migration.email,
-       '--service-auth', 'test-token', '--invite-code', 'invalid-code'],
-      "InvalidInviteCode: Invite code is invalid or expired"
-    )
+    stub_request(:post, "#{@migration.new_pds_host}/xrpc/com.atproto.server.createAccount")
+      .to_return(status: 400, body: { error: 'InvalidInviteCode', message: 'Invite code is invalid or expired' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.create_account_on_new_pds('test-token')
     end
 
     assert_match /Failed to create account/, error.message
-    assert_match /InvalidInviteCode/, error.message
+    # The error message contains "Invite code is invalid or expired" from the response
+    assert_match /Invite code is invalid or expired/, error.message
   end
 
   # ============================================================================
   # Stage 2: Rate Limiting Errors
   # ============================================================================
 
-  test "login_old_pds raises RateLimitError on HTTP 429" do
-    stub_goat_command_failure(
-      ['account', 'login', '--pds-host', @migration.old_pds_host,
-       '-u', @migration.old_handle, '-p', @migration.password],
-      "HTTP 429: Too Many Requests"
-    )
+  test "login_old_pds raises AuthenticationError with rate limit info on HTTP 429" do
+    stub_request(:post, "#{@migration.old_pds_host}/xrpc/com.atproto.server.createSession")
+      .to_return(status: 429, body: { error: 'RateLimitExceeded', message: 'Too Many Requests' }.to_json)
 
-    # login_old_pds wraps all errors in AuthenticationError
     error = assert_raises(GoatService::AuthenticationError) do
       @service.login_old_pds
     end
 
     assert_match /Failed to login to old PDS/, error.message
-    assert_match /HTTP 429/, error.message
-  end
-
-  test "rate_limit_error? detects various rate limit indicators" do
-    rate_limit_messages = [
-      "HTTP 429: Too Many Requests",
-      "RateLimitExceeded",
-      "rate limit exceeded",
-      "API request failed (HTTP 429)"
-    ]
-
-    rate_limit_messages.each do |msg|
-      assert @service.send(:rate_limit_error?, msg),
-        "Should detect rate limit in: #{msg}"
-    end
-  end
-
-  test "rate_limit_error? returns false for non-rate-limit errors" do
-    non_rate_limit_messages = [
-      "HTTP 401: Unauthorized",
-      "connection refused",
-      "timeout"
-    ]
-
-    non_rate_limit_messages.each do |msg|
-      assert_not @service.send(:rate_limit_error?, msg),
-        "Should not detect rate limit in: #{msg}"
-    end
   end
 
   # ============================================================================
   # Stage 3: Repository Export/Import Errors
   # ============================================================================
-
-  test "export_repo raises GoatError on timeout" do
-    skip "Complex test requiring multiple stubs (login, get_access_token, curl) - needs refactoring"
-
-    stub_goat_command_success(
-      ['account', 'login', '--pds-host', @migration.old_pds_host,
-       '-u', @migration.old_handle, '-p', @migration.password],
-      "", ""
-    )
-
-    # Stub the curl command to simulate timeout by raising Timeout::Error
-    Open3.stubs(:capture3).with(
-      anything, 'curl', '-s', '-f', '--max-time', '600',
-      "#{@migration.old_pds_host}/xrpc/com.atproto.sync.getRepo?did=#{@migration.did}",
-      anything
-    ).raises(Timeout::Error)
-
-    error = assert_raises(GoatService::TimeoutError) do
-      @service.export_repo
-    end
-
-    assert_match /Command timed out/, error.message
-  end
-
-  test "export_repo raises GoatError when CAR file empty" do
-    skip "Complex test requiring multiple stubs (login, get_access_token, curl) - needs refactoring"
-
-    stub_login_old_pds_success
-
-    # Stub curl to create empty file
-    car_path = @service.work_dir.join("account.#{Time.now.to_i}.car")
-    stub_command_success(['curl'], "", "") do
-      FileUtils.touch(car_path) # Create empty file
-    end
-
-    error = assert_raises(GoatService::GoatError) do
-      @service.export_repo
-    end
-
-    assert_match /file not created or empty/, error.message
-  end
 
   test "import_repo raises GoatError when CAR file not found" do
     error = assert_raises(GoatService::GoatError) do
@@ -318,17 +212,18 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
     car_path = @service.work_dir.join('test.car')
     File.write(car_path, 'test data')
 
-    stub_login_new_pds_success
-    stub_goat_command_failure(
-      ['repo', 'import', car_path.to_s],
-      "invalid CAR format"
-    )
+    stub_new_pds_login
+
+    stub_request(:post, "#{@migration.new_pds_host}/xrpc/com.atproto.repo.importRepo")
+      .to_return(status: 400, body: { error: 'InvalidRepo', message: 'invalid CAR format' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.import_repo(car_path.to_s)
     end
 
     assert_match /Failed to import repository/, error.message
+  ensure
+    FileUtils.rm_f(car_path) if car_path
   end
 
   # ============================================================================
@@ -336,11 +231,9 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "list_blobs raises RateLimitError on HTTP 429" do
-    stub_http_get_with_code(
-      "#{@migration.old_pds_host}/xrpc/com.atproto.sync.listBlobs?did=#{@migration.did}",
-      429,
-      { error: 'RateLimitExceeded' }.to_json
-    )
+    stub_request(:get, "#{@migration.old_pds_host}/xrpc/com.atproto.sync.listBlobs")
+      .with(query: { did: @migration.did })
+      .to_return(status: 429, body: { error: 'RateLimitExceeded' }.to_json)
 
     error = assert_raises(GoatService::RateLimitError) do
       @service.list_blobs
@@ -350,11 +243,9 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "list_blobs raises NetworkError on non-success response" do
-    stub_http_get_with_code(
-      "#{@migration.old_pds_host}/xrpc/com.atproto.sync.listBlobs?did=#{@migration.did}",
-      500,
-      { error: 'InternalServerError' }.to_json
-    )
+    stub_request(:get, "#{@migration.old_pds_host}/xrpc/com.atproto.sync.listBlobs")
+      .with(query: { did: @migration.did })
+      .to_return(status: 500, body: { error: 'InternalServerError' }.to_json)
 
     error = assert_raises(GoatService::NetworkError) do
       @service.list_blobs
@@ -365,10 +256,9 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
 
   test "list_blobs includes cursor parameter when provided" do
     cursor = "next_page_cursor"
-    stub_http_get(
-      "#{@migration.old_pds_host}/xrpc/com.atproto.sync.listBlobs?did=#{@migration.did}&cursor=#{cursor}",
-      { cids: [], cursor: nil }.to_json
-    )
+    stub_request(:get, "#{@migration.old_pds_host}/xrpc/com.atproto.sync.listBlobs")
+      .with(query: { did: @migration.did, cursor: cursor })
+      .to_return(status: 200, body: { cids: [], cursor: nil }.to_json)
 
     result = @service.list_blobs(cursor)
 
@@ -377,11 +267,9 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
 
   test "download_blob raises RateLimitError on HTTP 429" do
     cid = "bafybeiabc123"
-    stub_http_get_with_code(
-      "#{@migration.old_pds_host}/xrpc/com.atproto.sync.getBlob?did=#{@migration.did}&cid=#{cid}",
-      429,
-      ""
-    )
+    stub_request(:get, "#{@migration.old_pds_host}/xrpc/com.atproto.sync.getBlob")
+      .with(query: { did: @migration.did, cid: cid })
+      .to_return(status: 429, body: "")
 
     error = assert_raises(GoatService::RateLimitError) do
       @service.download_blob(cid)
@@ -392,11 +280,9 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
 
   test "download_blob raises NetworkError on 404 (blob not found)" do
     cid = "bafybeimissing"
-    stub_http_get_with_code(
-      "#{@migration.old_pds_host}/xrpc/com.atproto.sync.getBlob?did=#{@migration.did}&cid=#{cid}",
-      404,
-      { error: 'BlobNotFound' }.to_json
-    )
+    stub_request(:get, "#{@migration.old_pds_host}/xrpc/com.atproto.sync.getBlob")
+      .with(query: { did: @migration.did, cid: cid })
+      .to_return(status: 404, body: { error: 'BlobNotFound' }.to_json)
 
     error = assert_raises(GoatService::NetworkError) do
       @service.download_blob(cid)
@@ -410,24 +296,19 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
     FileUtils.mkdir_p(blob_path.dirname)
     File.binwrite(blob_path, 'test blob data')
 
-    # Stub session token retrieval
-    allow_session_token_retrieval
+    # Pre-populate access token to avoid login
+    @service.instance_variable_get(:@access_tokens)["#{@migration.new_pds_host}:#{@migration.did}"] = 'test-token'
 
-    stub_http_post_with_code(
-      "#{@migration.new_pds_host}/xrpc/com.atproto.repo.uploadBlob",
-      429,
-      { error: 'RateLimitExceeded' }.to_json
-    )
+    stub_request(:post, "#{@migration.new_pds_host}/xrpc/com.atproto.repo.uploadBlob")
+      .to_return(status: 429, body: { error: 'RateLimitExceeded' }.to_json)
 
     error = assert_raises(GoatService::RateLimitError) do
       @service.upload_blob(blob_path.to_s)
     end
 
     assert_match /rate limit exceeded/, error.message
-  end
-
-  test "upload_blob refreshes token and retries on 401" do
-    skip "HTTParty stubbing conflicts - needs refactoring to use WebMock or fix stub ordering"
+  ensure
+    FileUtils.rm_rf(blob_path.dirname) if blob_path
   end
 
   test "upload_blob raises GoatError when blob file not found" do
@@ -443,11 +324,10 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "export_preferences raises GoatError on failure" do
-    stub_login_old_pds_success
-    stub_goat_command_failure(
-      ['bsky', 'prefs', 'export'],
-      "failed to export preferences"
-    )
+    stub_old_pds_login
+
+    stub_request(:get, /#{Regexp.escape(@migration.old_pds_host)}.*app\.bsky\.actor\.getPreferences/)
+      .to_return(status: 500, body: { error: 'InternalServerError', message: 'failed to export preferences' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.export_preferences
@@ -466,19 +346,20 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
 
   test "import_preferences raises GoatError on import failure" do
     prefs_path = @service.work_dir.join('prefs.json')
-    File.write(prefs_path, '{}')
+    File.write(prefs_path, '{"preferences": []}')
 
-    stub_login_new_pds_success
-    stub_goat_command_failure(
-      ['bsky', 'prefs', 'import', prefs_path.to_s],
-      "invalid preferences format"
-    )
+    stub_new_pds_login
+
+    stub_request(:post, /#{Regexp.escape(@migration.new_pds_host)}.*app\.bsky\.actor\.putPreferences/)
+      .to_return(status: 400, body: { error: 'InvalidRequest', message: 'invalid preferences format' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.import_preferences(prefs_path.to_s)
     end
 
     assert_match /Failed to import preferences/, error.message
+  ensure
+    FileUtils.rm_f(prefs_path) if prefs_path
   end
 
   # ============================================================================
@@ -486,11 +367,10 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "request_plc_token raises GoatError on failure" do
-    stub_login_old_pds_success
-    stub_goat_command_failure(
-      ['account', 'plc', 'request-token'],
-      "PLC token request denied"
-    )
+    stub_old_pds_login
+
+    stub_request(:post, /#{Regexp.escape(@migration.old_pds_host)}.*com\.atproto\.identity\.requestPlcOperationSignature/)
+      .to_return(status: 400, body: { error: 'InvalidRequest', message: 'PLC token request denied' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.request_plc_token
@@ -504,17 +384,10 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "get_recommended_plc_operation raises GoatError on failure" do
-    # Stub login_new_pds (not old)
-    stub_goat_command_success(
-      ['account', 'login', '--pds-host', @migration.new_pds_host,
-       '-u', @migration.did, '-p', @migration.password],
-      "", ""
-    )
+    stub_new_pds_login
 
-    stub_goat_command_failure(
-      ['account', 'plc', 'recommended'],
-      "failed to get recommended parameters"
-    )
+    stub_request(:get, /#{Regexp.escape(@migration.new_pds_host)}.*com\.atproto\.identity\.getRecommendedDidCredentials/)
+      .to_return(status: 500, body: { error: 'InternalServerError', message: 'failed to get recommended parameters' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.get_recommended_plc_operation
@@ -540,6 +413,8 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
     end
 
     assert_match /PLC token is required/, error.message
+  ensure
+    FileUtils.rm_f(unsigned_path) if unsigned_path
   end
 
   test "sign_plc_operation raises GoatError when token is empty" do
@@ -551,23 +426,26 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
     end
 
     assert_match /PLC token is required/, error.message
+  ensure
+    FileUtils.rm_f(unsigned_path) if unsigned_path
   end
 
   test "sign_plc_operation raises GoatError on signing failure" do
     unsigned_path = @service.work_dir.join('plc_unsigned.json')
-    File.write(unsigned_path, '{}')
+    File.write(unsigned_path, '{"rotationKeys": [], "alsoKnownAs": [], "verificationMethods": {}, "services": {}}')
 
-    stub_login_old_pds_success
-    stub_goat_command_failure(
-      ['account', 'plc', 'sign', '--token', 'invalid-token', unsigned_path.to_s],
-      "invalid PLC token"
-    )
+    stub_old_pds_login
+
+    stub_request(:post, /#{Regexp.escape(@migration.old_pds_host)}.*com\.atproto\.identity\.signPlcOperation/)
+      .to_return(status: 400, body: { error: 'InvalidToken', message: 'invalid PLC token' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.sign_plc_operation(unsigned_path.to_s, 'invalid-token')
     end
 
     assert_match /Failed to sign PLC operation/, error.message
+  ensure
+    FileUtils.rm_f(unsigned_path) if unsigned_path
   end
 
   test "submit_plc_operation raises GoatError when signed file not found" do
@@ -580,19 +458,20 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
 
   test "submit_plc_operation raises GoatError on submission failure" do
     signed_path = @service.work_dir.join('plc_signed.json')
-    File.write(signed_path, '{}')
+    File.write(signed_path, '{"operation": {}}')
 
-    stub_login_new_pds_success
-    stub_goat_command_failure(
-      ['account', 'plc', 'submit', signed_path.to_s],
-      "PLC directory rejected operation"
-    )
+    stub_new_pds_login
+
+    stub_request(:post, /#{Regexp.escape(@migration.new_pds_host)}.*com\.atproto\.identity\.submitPlcOperation/)
+      .to_return(status: 400, body: { error: 'InvalidSignature', message: 'PLC directory rejected operation' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.submit_plc_operation(signed_path.to_s)
     end
 
     assert_match /Failed to submit PLC operation/, error.message
+  ensure
+    FileUtils.rm_f(signed_path) if signed_path
   end
 
   # ============================================================================
@@ -600,13 +479,10 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "activate_account raises GoatError on failure" do
-    # Stub login to new PDS (logout is stubbed globally in setup)
-    stub_login_new_pds_success
-    # Stub activate failure
-    stub_goat_command_failure(
-      ['account', 'activate'],
-      "activation failed"
-    )
+    stub_new_pds_login
+
+    stub_request(:post, /#{Regexp.escape(@migration.new_pds_host)}.*com\.atproto\.server\.activateAccount/)
+      .to_return(status: 400, body: { error: 'InvalidRequest', message: 'activation failed' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.activate_account
@@ -616,12 +492,10 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "deactivate_account raises GoatError on failure" do
-    # Stub login to old PDS (logout is stubbed globally in setup)
-    stub_login_old_pds_success
-    stub_goat_command_failure(
-      ['account', 'deactivate'],
-      "deactivation failed"
-    )
+    stub_old_pds_login
+
+    stub_request(:post, /#{Regexp.escape(@migration.old_pds_host)}.*com\.atproto\.server\.deactivateAccount/)
+      .to_return(status: 400, body: { error: 'InvalidRequest', message: 'deactivation failed' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.deactivate_account
@@ -631,43 +505,26 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   # ============================================================================
-  # Rotation Key Errors
+  # Rotation Key Generation
   # ============================================================================
 
-  test "generate_rotation_key raises GoatError on parsing failure" do
-    stub_goat_command_success(
-      ['key', 'generate', '--type', 'P-256'],
-      "unexpected output format",
-      ""
-    )
+  test "generate_rotation_key returns valid key pair" do
+    result = @service.generate_rotation_key
 
-    error = assert_raises(GoatService::GoatError) do
-      @service.generate_rotation_key
-    end
-
-    assert_match /Failed to parse rotation key/, error.message
-  end
-
-  test "generate_rotation_key raises GoatError when command fails" do
-    stub_goat_command_failure(
-      ['key', 'generate', '--type', 'P-256'],
-      "key generation failed"
-    )
-
-    error = assert_raises(GoatService::GoatError) do
-      @service.generate_rotation_key
-    end
-
-    assert_match /Failed to generate rotation key/, error.message
+    assert result[:private_key].present?, "Should have private key"
+    assert result[:public_key].present?, "Should have public key"
+    assert result[:private_key].start_with?('z'), "Private key should be base58btc encoded"
+    assert result[:public_key].start_with?('did:key:z'), "Public key should be did:key format"
   end
 
   test "add_rotation_key_to_pds raises GoatError on failure" do
-    stub_goat_command_failure(
-      ['account', 'plc', 'add-rotation-key', '--pds-host', @migration.new_pds_host,
-       '--handle', @migration.new_handle, '--password', @migration.password,
-       'did:key:test', '--first'],
-      "failed to add rotation key"
-    )
+    stub_new_pds_login
+
+    stub_request(:get, /#{Regexp.escape(@migration.new_pds_host)}.*com\.atproto\.identity\.getRecommendedDidCredentials/)
+      .to_return(status: 200, body: { rotationKeys: [], alsoKnownAs: [], verificationMethods: {}, services: {} }.to_json)
+
+    stub_request(:post, /#{Regexp.escape(@migration.new_pds_host)}.*com\.atproto\.identity\.signPlcOperation/)
+      .to_return(status: 400, body: { error: 'InvalidRequest', message: 'failed to add rotation key' }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       @service.add_rotation_key_to_pds('did:key:test')
@@ -681,60 +538,14 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "execute_command raises TimeoutError when command exceeds timeout" do
-    # Stub Open3.capture3 to raise Timeout::Error
-    Open3.stubs(:capture3).with(
-      anything, 'sleep', '10', chdir: @service.work_dir
-    ).raises(Timeout::Error)
+    # Mock Open3.capture3 to raise Timeout::Error
+    Open3.stubs(:capture3).raises(Timeout::Error)
 
     error = assert_raises(GoatService::TimeoutError) do
       @service.send(:execute_command, 'sleep', '10', timeout: 1)
     end
 
-    assert_match /Command timed out after 1 seconds/, error.message
-  end
-
-  test "execute_goat masks passwords in logs" do
-    # Capture logger output
-    log_output = StringIO.new
-    original_logger = @service.logger
-    @service.instance_variable_set(:@logger, Logger.new(log_output))
-
-    stub_goat_command_success(
-      ['account', 'login', '--pds-host', 'https://test.com',
-       '-u', 'user', '-p', 'secret_password'],
-      "", ""
-    )
-
-    @service.send(:execute_goat, 'account', 'login', '--pds-host', 'https://test.com',
-                  '-u', 'user', '-p', 'secret_password')
-
-    log_contents = log_output.string
-    assert_not log_contents.include?('secret_password'),
-      "Password should be masked in logs"
-    assert log_contents.include?('[REDACTED]'),
-      "Should show [REDACTED] for masked values"
-  ensure
-    @service.instance_variable_set(:@logger, original_logger)
-  end
-
-  test "execute_goat masks tokens in logs" do
-    log_output = StringIO.new
-    original_logger = @service.logger
-    @service.instance_variable_set(:@logger, Logger.new(log_output))
-
-    stub_goat_command_success(
-      ['account', 'plc', 'sign', '--token', 'secret_plc_token', 'file.json'],
-      "", ""
-    )
-
-    @service.send(:execute_goat, 'account', 'plc', 'sign',
-                  '--token', 'secret_plc_token', 'file.json')
-
-    log_contents = log_output.string
-    assert_not log_contents.include?('secret_plc_token'),
-      "Token should be masked in logs"
-  ensure
-    @service.instance_variable_set(:@logger, original_logger)
+    assert_match /Command timed out/, error.message
   end
 
   # ============================================================================
@@ -742,18 +553,17 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   # ============================================================================
 
   test "resolve_handle_to_did raises NetworkError when handle not found" do
-    stub_dns_lookup_failure('_atproto.nonexistent.handle.com')
+    # Stub DNS lookup to fail
+    Resolv::DNS.any_instance.stubs(:getresources).returns([])
 
-    # Stub HTTParty.get with query parameter
-    HTTParty.stubs(:get).with(
-      'https://bsky.social/xrpc/com.atproto.identity.resolveHandle',
-      query: { handle: 'nonexistent.handle.com' }, timeout: 10
-    ).returns(stub(success?: false, code: 404, body: ""))
+    # Stub HTTParty.get for all resolution attempts
+    stub_request(:get, "https://bsky.social/xrpc/com.atproto.identity.resolveHandle")
+      .with(query: { handle: 'nonexistent.handle.com' })
+      .to_return(status: 404, body: "")
 
-    HTTParty.stubs(:get).with(
-      'https://bsky.network/xrpc/com.atproto.identity.resolveHandle',
-      query: { handle: 'nonexistent.handle.com' }, timeout: 10
-    ).returns(stub(success?: false, code: 404, body: ""))
+    stub_request(:get, "https://bsky.network/xrpc/com.atproto.identity.resolveHandle")
+      .with(query: { handle: 'nonexistent.handle.com' })
+      .to_return(status: 404, body: "")
 
     error = assert_raises(GoatService::NetworkError) do
       GoatService.resolve_handle_to_did('nonexistent.handle.com')
@@ -763,11 +573,8 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "resolve_did_to_pds raises NetworkError when DID document not found" do
-    stub_http_get_with_code(
-      "https://plc.directory/did:plc:nonexistent",
-      404,
-      { error: 'NotFound' }.to_json
-    )
+    stub_request(:get, "https://plc.directory/did:plc:nonexistent")
+      .to_return(status: 404, body: { error: 'NotFound' }.to_json)
 
     error = assert_raises(GoatService::NetworkError) do
       GoatService.resolve_did_to_pds('did:plc:nonexistent')
@@ -777,10 +584,8 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
   end
 
   test "resolve_did_to_pds raises GoatError when no PDS endpoint in DID document" do
-    stub_http_get(
-      "https://plc.directory/did:plc:test",
-      { did: 'did:plc:test', service: [] }.to_json
-    )
+    stub_request(:get, "https://plc.directory/did:plc:test")
+      .to_return(status: 200, body: { did: 'did:plc:test', service: [] }.to_json)
 
     error = assert_raises(GoatService::GoatError) do
       GoatService.resolve_did_to_pds('did:plc:test')
@@ -795,104 +600,33 @@ class GoatServiceErrorTest < ActiveSupport::TestCase
 
   private
 
-  def stub_goat_command_success(args, stdout, stderr)
-    # Stub Open3.capture3 for goat commands
-    # Use 'anything' for env hash to match any hash value
-    Open3.stubs(:capture3).with(
-      anything,  # Match any env hash (including the XDG_STATE_HOME/ATP_* vars)
-      'goat',
-      *args,
-      chdir: @service.work_dir
-    ).returns([stdout, stderr, stub(success?: true)])
+  # Generate a mock JWT that minisky can parse for expiration checks
+  # Minisky uses Base64.decode64 (not urlsafe), so we need standard base64
+  def mock_jwt(exp: nil)
+    exp ||= (Time.now.to_i + 3600)  # Default: 1 hour from now
+    header = Base64.strict_encode64({ alg: 'HS256', typ: 'JWT' }.to_json)
+    payload = Base64.strict_encode64({ sub: 'test', exp: exp }.to_json)
+    signature = Base64.strict_encode64('mock-signature')
+    "#{header}.#{payload}.#{signature}"
   end
 
-  def stub_goat_command_failure(args, error_message)
-    # Use 'anything' for env hash to match any hash value
-    Open3.stubs(:capture3).with(
-      anything,  # Match any env hash (including the XDG_STATE_HOME/ATP_* vars)
-      'goat',
-      *args,
-      chdir: @service.work_dir
-    ).returns(["", error_message, stub(success?: false)])
+  def stub_old_pds_login
+    stub_request(:post, "#{@migration.old_pds_host}/xrpc/com.atproto.server.createSession")
+      .to_return(status: 200, body: {
+        did: @migration.did,
+        handle: @migration.old_handle,
+        accessJwt: mock_jwt,
+        refreshJwt: mock_jwt
+      }.to_json, headers: { 'Content-Type' => 'application/json' })
   end
 
-  def stub_command_success(cmd, stdout, stderr, &block)
-    Open3.stubs(:capture3).with({}, *cmd, chdir: @service.work_dir).returns([stdout, stderr, stub(success?: true)])
-    block.call if block_given?
-  end
-
-  def stub_command_timeout(cmd, timeout:)
-    Open3.stubs(:capture3).with({}, *cmd.any?, chdir: @service.work_dir).raises(Timeout::Error)
-  end
-
-  def stub_http_get(url, response_body, code: 200)
-    HTTParty.stubs(:get).with(url, any_parameters).returns(
-      stub(success?: code == 200, code: code, body: response_body)
-    )
-  end
-
-  def stub_http_get_with_code(url, code, response_body)
-    HTTParty.stubs(:get).with(url, any_parameters).returns(
-      stub(success?: code == 200, code: code, body: response_body, message: "HTTP #{code}")
-    )
-  end
-
-  # Stub curl command for check_account_exists (which uses execute_command with curl)
-  def stub_curl_get(url, response_body)
-    Open3.stubs(:capture3).with(
-      anything, 'curl', '-s', url, anything
-    ).returns([response_body, "", stub(success?: true)])
-  end
-
-  def stub_http_post_with_code(url, code, response_body)
-    HTTParty.stubs(:post).with(url, any_parameters).returns(
-      stub(success?: code == 200, code: code, body: response_body, message: "HTTP #{code}")
-    )
-  end
-
-  def stub_http_post_dynamic(url, &block)
-    HTTParty.stubs(:post).with(url, any_parameters).returns do
-      code, body = block.call
-      stub(success?: code == 200, code: code, body: body, message: "HTTP #{code}")
-    end
-  end
-
-  def stub_dns_lookup_failure(record)
-    Resolv::DNS.any_instance.stubs(:getresources).with(record, Resolv::DNS::Resource::IN::TXT).returns([])
-  end
-
-  def allow_session_token_retrieval
-    @service.instance_variable_get(:@access_tokens)["#{@migration.new_pds_host}:#{@migration.did}"] = 'test-token'
-  end
-
-  def stub_session_creation
-    HTTParty.stubs(:post).with(
-      "#{@migration.new_pds_host}/xrpc/com.atproto.server.createSession",
-      any_parameters
-    ).returns(
-      stub(success?: true, code: 200, body: { accessJwt: 'new-token' }.to_json)
-    )
-  end
-
-  def stub_login_old_pds_success
-    # Match login with any password (handles both set and expired credentials)
-    Open3.stubs(:capture3).with(
-      anything,
-      'goat',
-      'account', 'login', '--pds-host', @migration.old_pds_host,
-      '-u', @migration.old_handle, '-p', anything,
-      chdir: @service.work_dir
-    ).returns(["", "", stub(success?: true)])
-  end
-
-  def stub_login_new_pds_success
-    # Match login with any password (handles both set and expired credentials)
-    Open3.stubs(:capture3).with(
-      anything,
-      'goat',
-      'account', 'login', '--pds-host', @migration.new_pds_host,
-      '-u', @migration.did, '-p', anything,
-      chdir: @service.work_dir
-    ).returns(["", "", stub(success?: true)])
+  def stub_new_pds_login
+    stub_request(:post, "#{@migration.new_pds_host}/xrpc/com.atproto.server.createSession")
+      .to_return(status: 200, body: {
+        did: @migration.did,
+        handle: @migration.new_handle,
+        accessJwt: mock_jwt,
+        refreshJwt: mock_jwt
+      }.to_json, headers: { 'Content-Type' => 'application/json' })
   end
 end

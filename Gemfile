@@ -24,6 +24,12 @@ gem "rubyzip", "~> 2.3"
 # HTTP client
 gem "httparty", "~> 0.21"
 
+# ATProto XRPC client
+gem "minisky", "~> 0.4"
+
+# Base58 encoding for key generation
+gem "base58", "~> 0.2"
+
 # Encryption for sensitive data
 gem "lockbox", "~> 1.3"
 

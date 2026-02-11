@@ -1,6 +1,6 @@
 # GoatService - Core service for PDS migration operations
 #
-# This service wraps the goat CLI tool and makes direct ATProto API calls
+# This service uses minisky-based PDS clients and direct HTTP calls
 # to handle account migration between Personal Data Servers (PDS).
 #
 # The service orchestrates the complex multi-step migration process:
@@ -25,7 +25,7 @@
 #   - NetworkError: HTTP/API communication failures
 #   - RateLimitError: PDS rate-limiting (HTTP 429)
 #   - TimeoutError: Operations exceeding timeout limits
-#   - GoatError: General goat CLI or operation failures
+#   - GoatError: General operation failures
 #
 # Work Files:
 #   All temporary files stored in: Rails.root/tmp/goat/{did}/
@@ -35,12 +35,33 @@
 #   - plc_*.json (PLC operation files)
 #
 # Requirements:
-#   - goat CLI must be installed and in PATH
 #   - Migration model with required fields (did, handles, hosts, password)
 #   - Network access to both source and target PDS
 #   - PLC directory access for DID updates
 
 require 'open3'
+require 'base58'
+require 'minisky'
+
+# PdsClient: A programmatic minisky client that doesn't require a config file
+class PdsClient
+  include Minisky::Requests
+
+  attr_reader :host
+  attr_accessor :config
+
+  def initialize(host, identifier, password)
+    @host = host
+    @config = {
+      'id' => identifier,
+      'pass' => password
+    }
+  end
+
+  def save_config
+    # No-op: we don't persist config to disk
+  end
+end
 
 class GoatService
   # Custom exceptions
@@ -72,13 +93,8 @@ class GoatService
   def login_old_pds
     logger.info("Logging in to old PDS: #{migration.old_pds_host}")
 
-    # Use the old handle for login
-    execute_goat(
-      'account', 'login',
-      '--pds-host', migration.old_pds_host,
-      '-u', migration.old_handle,
-      '-p', migration.password
-    )
+    # Create/retrieve minisky client (handles login automatically)
+    old_pds_client
 
     logger.info("Successfully logged in to old PDS")
   rescue StandardError => e
@@ -88,19 +104,15 @@ class GoatService
   def login_new_pds
     logger.info("Logging in to new PDS: #{migration.new_pds_host}")
 
-    # Clear any existing session first to avoid conflicts
-    logout_goat
+    # Clear any existing new PDS session first to avoid conflicts
+    @pds_clients&.delete(:new_pds)
 
     # Use DID for login to new PDS
     password = migration.password
     logger.info("Password available: #{!password.nil?}, length: #{password&.length || 0}")
 
-    execute_goat(
-      'account', 'login',
-      '--pds-host', migration.new_pds_host,
-      '-u', migration.did,
-      '-p', password
-    )
+    # Create/retrieve minisky client (handles login automatically)
+    new_pds_client
 
     logger.info("Successfully logged in to new PDS")
   rescue StandardError => e
@@ -108,8 +120,9 @@ class GoatService
   end
 
   def logout_goat
-    logger.debug("Clearing goat session")
-    execute_goat('account', 'logout') rescue nil
+    logger.debug("Clearing PDS sessions")
+    clear_pds_clients
+    @access_tokens = {}
   end
 
   # Account Creation Methods
@@ -118,15 +131,14 @@ class GoatService
     logger.info("Getting service auth token for PDS: #{new_pds_did}")
 
     # Must be logged in to old PDS first
-    stdout, _stderr, _status = execute_goat(
-      'account', 'service-auth',
-      '--lxm', 'com.atproto.server.createAccount',
-      '--aud', new_pds_did,
-      '--duration-sec', '3600'
-    )
+    response = old_pds_client.get_request('com.atproto.server.getServiceAuth', {
+      aud: new_pds_did,
+      lxm: 'com.atproto.server.createAccount',
+      exp: (Time.now.to_i + 3600)
+    })
 
-    token = stdout.strip
-    raise GoatError, "Empty service auth token received" if token.empty?
+    token = response['token']
+    raise GoatError, "Empty service auth token received" if token.nil? || token.empty?
 
     logger.info("Service auth token obtained")
     token
@@ -137,10 +149,10 @@ class GoatService
   def check_account_exists_on_new_pds
     logger.info("Checking if account already exists on new PDS")
 
-    url = "#{migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo?repo=#{migration.did}"
+    url = "#{migration.new_pds_host}/xrpc/com.atproto.repo.describeRepo"
 
-    stdout, _stderr, _status = execute_command('curl', '-s', url, timeout: 30)
-    response = JSON.parse(stdout) rescue {}
+    http_response = HTTParty.get(url, query: { repo: migration.did }, timeout: 30)
+    response = JSON.parse(http_response.body) rescue {}
 
     if response['error'] == 'RepoDeactivated'
       logger.warn("Orphaned deactivated account found on new PDS")
@@ -181,45 +193,58 @@ class GoatService
   def create_account_on_new_pds(service_auth_token)
     logger.info("Creating account on new PDS with existing DID")
 
-    # Build command arguments
-    args = [
-      'account', 'create',
-      '--pds-host', migration.new_pds_host,
-      '--existing-did', migration.did,
-      '--handle', migration.new_handle,
-      '--password', migration.password,
-      '--email', migration.email,
-      '--service-auth', service_auth_token
-    ]
+    # Build request body
+    body = {
+      did: migration.did,
+      handle: migration.new_handle,
+      password: migration.password,
+      email: migration.email
+    }
 
     # Add invite code if present
     if migration.invite_code.present?
       logger.info("Including invite code for account creation")
-      args += ['--invite-code', migration.invite_code]
+      body[:inviteCode] = migration.invite_code
     end
 
-    execute_goat(*args)
+    # Use raw HTTParty - service auth token goes in Authorization header
+    response = HTTParty.post(
+      "#{migration.new_pds_host}/xrpc/com.atproto.server.createAccount",
+      headers: {
+        'Content-Type' => 'application/json',
+        'Authorization' => "Bearer #{service_auth_token}"
+      },
+      body: body.to_json,
+      timeout: 60
+    )
+
+    unless response.success?
+      error_body = JSON.parse(response.body) rescue {}
+      error_message = error_body['message'] || error_body['error'] || "HTTP #{response.code}"
+
+      # Check if this is an "AlreadyExists" error
+      if error_message.include?("AlreadyExists") || error_message.include?("Repo already exists")
+        # Check the status of the existing account
+        account_status = check_account_exists_on_new_pds
+
+        if account_status[:exists] && account_status[:deactivated]
+          raise AccountExistsError, "Orphaned deactivated account exists on target PDS. " \
+            "This is from a previous failed migration. To fix: delete the account from the PDS database " \
+            "and retry the migration. DID: #{migration.did}, PDS: #{migration.new_pds_host}"
+        elsif account_status[:exists]
+          raise AccountExistsError, "Active account already exists on target PDS with handle: #{account_status[:handle]}. " \
+            "Cannot migrate to an already active account. DID: #{migration.did}"
+        end
+      end
+
+      raise GoatError, "Failed to create account on new PDS: #{error_message}"
+    end
 
     logger.info("Account created on new PDS")
+  rescue AccountExistsError
+    raise
   rescue StandardError => e
-    error_message = e.message
-
-    # Check if this is an "AlreadyExists" error
-    if error_message.include?("AlreadyExists") || error_message.include?("Repo already exists")
-      # Check the status of the existing account
-      account_status = check_account_exists_on_new_pds
-
-      if account_status[:exists] && account_status[:deactivated]
-        raise AccountExistsError, "Orphaned deactivated account exists on target PDS. " \
-          "This is from a previous failed migration. To fix: delete the account from the PDS database " \
-          "and retry the migration. DID: #{migration.did}, PDS: #{migration.new_pds_host}"
-      elsif account_status[:exists]
-        raise AccountExistsError, "Active account already exists on target PDS with handle: #{account_status[:handle]}. " \
-          "Cannot migrate to an already active account. DID: #{migration.did}"
-      end
-    end
-
-    raise GoatError, "Failed to create account on new PDS: #{error_message}"
+    raise GoatError, "Failed to create account on new PDS: #{e.message}"
   end
 
   # Rotation Key Methods
@@ -227,49 +252,35 @@ class GoatService
   def generate_rotation_key
     logger.info("Generating rotation key for account recovery")
 
-    # Use goat to generate a P-256 rotation key
-    stdout, _stderr, _status = execute_goat('key', 'generate', '--type', 'P-256')
+    # Generate P-256 (prime256v1/secp256r1) key pair using OpenSSL
+    ec_key = OpenSSL::PKey::EC.generate('prime256v1')
 
-    # Parse output to extract keys
-    # Expected format:
-    # Secret Key (Multibase Syntax): save this securely (eg, add to password manager)
-    #   z42tk...
-    # Public Key (DID Key Syntax): share or publish this (eg, in DID document)
-    #   did:key:zDnae...
-    private_key = nil
-    public_key = nil
-    next_line_is_private_key = false
-    next_line_is_public_key = false
+    # Get compressed public key (33 bytes: 1 byte prefix + 32 bytes X coordinate)
+    public_point = ec_key.public_key.to_octet_string(:compressed)
 
-    stdout.each_line do |line|
-      line_stripped = line.strip
+    # Get private key as 32-byte scalar (zero-padded if needed)
+    private_key_bn = ec_key.private_key
+    private_key_bytes = private_key_bn.to_s(2).rjust(32, "\x00")
 
-      if next_line_is_private_key
-        # This line contains the private key value
-        private_key = line_stripped if line_stripped.start_with?('z')
-        next_line_is_private_key = false
-      elsif next_line_is_public_key
-        # This line contains the public key value
-        public_key = line_stripped if line_stripped.start_with?('did:key:')
-        next_line_is_public_key = false
-      elsif line.include?("Secret Key") && line.include?("Multibase")
-        # Next line will have the private key
-        next_line_is_private_key = true
-      elsif line.include?("Public Key") && line.include?("DID Key")
-        # Next line will have the public key
-        next_line_is_public_key = true
-      end
-    end
+    # Encode public key as did:key with P-256 multicodec prefix
+    # P-256 public key multicodec: 0x1200 (varint encoded as 0x80, 0x24)
+    # See: https://github.com/multiformats/multicodec/blob/master/table.csv
+    p256_public_prefix = [0x80, 0x24].pack('C*')
+    public_key_with_prefix = p256_public_prefix + public_point
+    public_multibase = 'z' + Base58.binary_to_base58(public_key_with_prefix, :bitcoin)
+    public_key_did = "did:key:#{public_multibase}"
 
-    unless private_key && public_key
-      raise GoatError, "Failed to parse rotation key from goat output: #{stdout}"
-    end
+    # Encode private key in multibase format
+    # P-256 private key multicodec: 0x1306 (varint encoded as 0x86, 0x26)
+    p256_private_prefix = [0x86, 0x26].pack('C*')
+    private_key_with_prefix = p256_private_prefix + private_key_bytes
+    private_multibase = 'z' + Base58.binary_to_base58(private_key_with_prefix, :bitcoin)
 
     logger.info("Rotation key generated successfully")
 
     {
-      private_key: private_key,
-      public_key: public_key
+      private_key: private_multibase,
+      public_key: public_key_did
     }
   rescue StandardError => e
     raise GoatError, "Failed to generate rotation key: #{e.message}"
@@ -278,16 +289,26 @@ class GoatService
   def add_rotation_key_to_pds(public_key)
     logger.info("Adding rotation key to PDS account (highest priority)")
 
-    # Add rotation key to account via PDS
-    # Using --first flag to add it at highest priority
-    execute_goat(
-      'account', 'plc', 'add-rotation-key',
-      '--pds-host', migration.new_pds_host,
-      '--handle', migration.new_handle,
-      '--password', migration.password,
-      public_key,
-      '--first'
-    )
+    # Get current recommended DID credentials from new PDS
+    recommended = new_pds_client.get_request('com.atproto.identity.getRecommendedDidCredentials', {})
+
+    # Add the new rotation key at the front (highest priority)
+    rotation_keys = recommended['rotationKeys'] || []
+    rotation_keys = [public_key] + rotation_keys.reject { |k| k == public_key }
+
+    # Sign the PLC operation with updated rotation keys via the new PDS
+    # Note: This requires the PDS to have signing authority
+    signed_response = new_pds_client.post_request('com.atproto.identity.signPlcOperation', {
+      rotationKeys: rotation_keys,
+      alsoKnownAs: recommended['alsoKnownAs'],
+      verificationMethods: recommended['verificationMethods'],
+      services: recommended['services']
+    })
+
+    # Submit the signed operation to PLC
+    new_pds_client.post_request('com.atproto.identity.submitPlcOperation', {
+      operation: signed_response['operation']
+    })
 
     logger.info("Rotation key added to PDS account")
   rescue StandardError => e
@@ -350,11 +371,28 @@ class GoatService
       raise GoatError, "CAR file not found: #{car_path}"
     end
 
-    # Login to new PDS with DID (works with older goat versions)
+    # Ensure we're logged in to new PDS
     login_new_pds
 
-    # Import repo using goat command
-    execute_goat('repo', 'import', car_path)
+    # Get access token from minisky client
+    access_token = new_pds_client.user.access_token
+
+    # Binary upload requires HTTParty since minisky/PDS client is JSON-focused
+    response = HTTParty.post(
+      "#{migration.new_pds_host}/xrpc/com.atproto.repo.importRepo",
+      headers: {
+        'Content-Type' => 'application/vnd.ipld.car',
+        'Authorization' => "Bearer #{access_token}"
+      },
+      body: File.binread(car_path),
+      timeout: 600  # 10 minutes for large repos
+    )
+
+    unless response.success?
+      error_body = JSON.parse(response.body) rescue {}
+      error_message = error_body['message'] || error_body['error'] || "HTTP #{response.code}"
+      raise GoatError, "Repository import failed: #{error_message}"
+    end
 
     logger.info("Repository imported successfully")
   rescue StandardError => e
@@ -513,9 +551,10 @@ class GoatService
 
     prefs_path = work_dir.join("prefs.json")
 
-    stdout, _stderr, _status = execute_goat('bsky', 'prefs', 'export')
+    # Get preferences via PDS client
+    response = old_pds_client.get_request('app.bsky.actor.getPreferences', {})
 
-    File.write(prefs_path, stdout)
+    File.write(prefs_path, response.to_json)
 
     logger.info("Preferences exported to #{prefs_path}")
     prefs_path.to_s
@@ -533,7 +572,13 @@ class GoatService
     # Must be logged in to new PDS
     login_new_pds
 
-    execute_goat('bsky', 'prefs', 'import', prefs_path)
+    # Read preferences from file
+    prefs_data = JSON.parse(File.read(prefs_path))
+
+    # Import preferences via PDS client
+    new_pds_client.post_request('app.bsky.actor.putPreferences', {
+      preferences: prefs_data['preferences']
+    })
 
     logger.info("Preferences imported successfully")
   rescue StandardError => e
@@ -548,7 +593,8 @@ class GoatService
     # Must be logged in to old PDS
     login_old_pds
 
-    execute_goat('account', 'plc', 'request-token')
+    # Request PLC operation signature token via email
+    old_pds_client.post_request('com.atproto.identity.requestPlcOperationSignature', {})
 
     logger.info("PLC token requested (check email or logs)")
 
@@ -567,9 +613,10 @@ class GoatService
 
     plc_recommended_path = work_dir.join("plc_recommended.json")
 
-    stdout, _stderr, _status = execute_goat('account', 'plc', 'recommended')
+    # Get recommended DID credentials from new PDS via PDS client
+    response = new_pds_client.get_request('com.atproto.identity.getRecommendedDidCredentials', {})
 
-    File.write(plc_recommended_path, stdout)
+    File.write(plc_recommended_path, response.to_json)
 
     logger.info("PLC recommended parameters saved to #{plc_recommended_path}")
 
@@ -598,13 +645,19 @@ class GoatService
 
     plc_signed_path = work_dir.join("plc_signed.json")
 
-    stdout, _stderr, _status = execute_goat(
-      'account', 'plc', 'sign',
-      '--token', token,
-      unsigned_op_path
-    )
+    # Read unsigned operation
+    unsigned_op = JSON.parse(File.read(unsigned_op_path))
 
-    File.write(plc_signed_path, stdout)
+    # Sign PLC operation via old PDS using the email token
+    response = old_pds_client.post_request('com.atproto.identity.signPlcOperation', {
+      token: token,
+      rotationKeys: unsigned_op['rotationKeys'],
+      alsoKnownAs: unsigned_op['alsoKnownAs'],
+      verificationMethods: unsigned_op['verificationMethods'],
+      services: unsigned_op['services']
+    })
+
+    File.write(plc_signed_path, response.to_json)
 
     logger.info("PLC operation signed and saved to #{plc_signed_path}")
     plc_signed_path.to_s
@@ -622,7 +675,13 @@ class GoatService
     # Must be logged in to new PDS for submission
     login_new_pds
 
-    execute_goat('account', 'plc', 'submit', signed_op_path)
+    # Read signed operation
+    signed_op = JSON.parse(File.read(signed_op_path))
+
+    # Submit PLC operation via new PDS
+    new_pds_client.post_request('com.atproto.identity.submitPlcOperation', {
+      operation: signed_op['operation']
+    })
 
     logger.info("PLC operation submitted successfully")
   rescue StandardError => e
@@ -637,7 +696,8 @@ class GoatService
     # Must be logged in to new PDS
     login_new_pds
 
-    execute_goat('account', 'activate')
+    # Activate account via PDS client
+    new_pds_client.post_request('com.atproto.server.activateAccount', {})
 
     logger.info("Account activated on new PDS")
   rescue StandardError => e
@@ -650,7 +710,8 @@ class GoatService
     # Must be logged in to old PDS
     login_old_pds
 
-    execute_goat('account', 'deactivate')
+    # Deactivate account via PDS client
+    old_pds_client.post_request('com.atproto.server.deactivateAccount', {})
 
     logger.info("Account deactivated on old PDS")
   rescue StandardError => e
@@ -660,10 +721,11 @@ class GoatService
   def get_account_status
     logger.info("Getting account status")
 
-    stdout, _stderr, _status = execute_goat('account', 'status')
+    # Get account status via PDS client
+    response = new_pds_client.get_request('com.atproto.server.checkAccountStatus', {})
 
     logger.info("Account status retrieved")
-    stdout
+    response.to_json
   rescue StandardError => e
     raise GoatError, "Failed to get account status: #{e.message}"
   end
@@ -671,10 +733,11 @@ class GoatService
   def check_missing_blobs
     logger.info("Checking for missing blobs")
 
-    stdout, _stderr, _status = execute_goat('account', 'missing-blobs')
+    # Check missing blobs via PDS client
+    response = new_pds_client.get_request('com.atproto.repo.listMissingBlobs', {})
 
     logger.info("Missing blobs check completed")
-    stdout
+    response.to_json
   rescue StandardError => e
     raise GoatError, "Failed to check missing blobs: #{e.message}"
   end
@@ -682,7 +745,7 @@ class GoatService
   # Cleanup Methods
 
   def cleanup
-    # Remove all migration files including goat state directory
+    # Remove all migration work files
     self.class.cleanup_migration_files(migration.did)
   end
 
@@ -699,69 +762,7 @@ class GoatService
 
   private
 
-  # Execute goat CLI command with proper error handling
-  def execute_goat(*args, timeout: DEFAULT_TIMEOUT)
-    # Set environment variables for goat
-    # CRITICAL: Use XDG_STATE_HOME to isolate session files per migration
-    # This prevents concurrent migrations from overwriting each other's auth sessions
-    # See: https://github.com/adrg/xdg (used by goat for session storage)
-    state_dir = work_dir.join('.goat-state')
-    FileUtils.mkdir_p(state_dir)
-
-    env = {
-      'XDG_STATE_HOME' => state_dir.to_s,  # Isolate goat session per migration
-      'ATP_PLC_HOST' => ENV['ATP_PLC_HOST'] || 'https://plc.directory',
-      'ATP_PDS_HOST' => migration.new_pds_host # Default PDS for goat
-    }
-
-    # Build full command
-    cmd = ['goat'] + args
-
-    # Log command with password and token masking
-    # NEVER log passwords/tokens in production, even with DEBUG_PASSWORDS
-    debug_cmd = if !Rails.env.production? && ENV['DEBUG_PASSWORDS'] == 'true'
-      cmd.join(' ')
-    else
-      # Mask passwords and tokens
-      masked = []
-      mask_next = false
-      cmd.each do |arg|
-        if mask_next
-          masked << '[REDACTED]'
-          mask_next = false
-        elsif arg =~ /^(-p|--password|--token|--service-auth)$/
-          masked << arg
-          mask_next = true
-        elsif arg =~ /^(--password=|--token=|--service-auth=)(.+)$/
-          # Handle --flag=value format
-          masked << "#{$1}[REDACTED]"
-        else
-          masked << arg
-        end
-      end
-      masked.join(' ')
-    end
-    logger.info("Executing goat: #{debug_cmd}")
-    logger.info("  ENV: ATP_PLC_HOST=#{env['ATP_PLC_HOST']}, ATP_PDS_HOST=#{env['ATP_PDS_HOST']}")
-
-    stdout, stderr, status = execute_command(*cmd, env: env, timeout: timeout)
-
-    unless status.success?
-      error_msg = stderr.empty? ? stdout : stderr
-
-      # Check for rate-limiting errors first
-      if rate_limit_error?(error_msg)
-        logger.warn("Rate limit detected in goat command: #{error_msg}")
-        raise RateLimitError, "PDS rate limit exceeded: #{error_msg}"
-      end
-
-      raise GoatError, "goat command failed: #{error_msg}"
-    end
-
-    [stdout, stderr, status]
-  end
-
-  # Execute shell command with timeout
+  # Execute shell command with timeout (used for curl in export_repo)
   def execute_command(*cmd, env: {}, timeout: DEFAULT_TIMEOUT)
     stdout = ''
     stderr = ''
@@ -779,87 +780,15 @@ class GoatService
     [stdout, stderr, status]
   end
 
-  # Detect rate-limiting errors from goat CLI output
-  # Checks for HTTP 429 status codes and rate-limit error messages
-  def rate_limit_error?(error_msg)
-    return false if error_msg.nil? || error_msg.empty?
-
-    # Check for common rate-limit indicators
-    error_msg.include?('HTTP 429') ||
-      error_msg.include?('RateLimitExceeded') ||
-      error_msg.include?('Too Many Requests') ||
-      error_msg.include?('rate limit') ||
-      error_msg.match?(/API request failed \(HTTP 429\)/)
-  end
-
-  # Get access token from goat session
-  # Note: This is a simplified version. In reality, we'd need to parse
-  # goat's session storage or maintain our own session state
-  #
+  # Get access token from session cache or create new session
   # @param pds_host [String] The PDS host to get a token for (old or new PDS)
   # @param identifier [String] The identifier to use for login (handle or DID)
-  # Get access token via direct API call (bypasses goat)
-  def get_access_token_via_api(pds_host:, identifier:, password:)
-    logger.info("Getting access token via direct API call to #{pds_host}")
-
-    url = "#{pds_host}/xrpc/com.atproto.server.createSession"
-
-    response = HTTParty.post(
-      url,
-      headers: { 'Content-Type' => 'application/json' },
-      body: {
-        identifier: identifier,
-        password: password
-      }.to_json,
-      timeout: 30
-    )
-
-    unless response.success?
-      error_body = JSON.parse(response.body) rescue {}
-      error_msg = error_body['message'] || error_body['error'] || "HTTP #{response.code}"
-      logger.error("Failed to get access token: #{error_msg}")
-      raise AuthenticationError, "Failed to get access token: #{error_msg}"
-    end
-
-    parsed = JSON.parse(response.body)
-
-    if parsed['accessJwt']
-      logger.info("Access token obtained via API")
-      return parsed['accessJwt']
-    else
-      error_msg = parsed['message'] || parsed['error'] || 'Unknown error'
-      raise AuthenticationError, "Failed to get access token: #{error_msg}"
-    end
-  rescue JSON::ParserError => e
-    logger.error("Failed to parse createSession response: #{e.message}")
-    raise AuthenticationError, "Invalid response from createSession"
-  rescue HTTParty::Error => e
-    logger.error("Network error during createSession: #{e.message}")
-    raise AuthenticationError, "Network error: #{e.message}"
-  end
-
   def get_access_token_from_session(pds_host:, identifier:)
     # Use cache key based on PDS host to support both old and new PDS
     cache_key = "#{pds_host}:#{identifier}"
 
     # Return cached token if available
     return @access_tokens[cache_key] if @access_tokens[cache_key]
-
-    # Try to read from goat session file
-    session_path = File.expand_path('~/.config/goat/session.json')
-
-    if File.exist?(session_path)
-      begin
-        session_data = JSON.parse(File.read(session_path))
-        if session_data['accessJwt']
-          @access_tokens[cache_key] = session_data['accessJwt']
-          logger.info("Using cached session token from goat session file")
-          return session_data['accessJwt']
-        end
-      rescue JSON::ParserError => e
-        logger.warn("Failed to parse goat session file: #{e.message}")
-      end
-    end
 
     # Create new session and cache the token
     logger.info("Creating new session for #{pds_host} (#{identifier})")
@@ -882,8 +811,7 @@ class GoatService
     token
   end
 
-  # Create session directly via API when goat session is unavailable
-  #
+  # Create session directly via API
   # @param pds_host [String] The PDS host to authenticate against
   # @param identifier [String] The identifier to use for login (handle or DID)
   def create_direct_session(pds_host:, identifier:)
@@ -930,6 +858,47 @@ class GoatService
     parsed['did']
   rescue StandardError => e
     raise NetworkError, "Failed to get PDS service DID: #{e.message}"
+  end
+
+  # PDS client management using minisky
+  # Returns a cached PdsClient for the old (source) PDS
+  def old_pds_client
+    @pds_clients ||= {}
+    @pds_clients[:old_pds] ||= create_pds_client(
+      host: migration.old_pds_host,
+      identifier: migration.old_handle,
+      password: migration.password
+    )
+  end
+
+  # Returns a cached PdsClient for the new (target) PDS
+  def new_pds_client
+    @pds_clients ||= {}
+    @pds_clients[:new_pds] ||= create_pds_client(
+      host: migration.new_pds_host,
+      identifier: migration.did,
+      password: migration.password
+    )
+  end
+
+  # Creates a new PdsClient and authenticates
+  def create_pds_client(host:, identifier:, password:)
+    logger.info("Creating PDS client for #{host} (#{identifier})")
+
+    client = PdsClient.new(host, identifier, password)
+
+    # Perform login to get tokens
+    client.log_in
+
+    logger.info("PDS client authenticated for #{host}")
+    client
+  rescue StandardError => e
+    raise AuthenticationError, "Failed to create PDS client for #{host}: #{e.message}"
+  end
+
+  # Clear cached PDS clients (e.g., after logout)
+  def clear_pds_clients
+    @pds_clients = {}
   end
 
   # Class methods for handle resolution
