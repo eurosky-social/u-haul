@@ -214,8 +214,8 @@
 
     .form-select {
       width: 100%;
-      padding: 12px;
-      font-size: 16px;
+      padding: 16px;
+      font-size: 18px;
       border: 2px solid #ddd;
       border-radius: 4px;
       background-color: white;
@@ -275,6 +275,8 @@
         emailReadonly: false,
         authenticated: false,
         pdsHost: null,
+        pdsVerified: false,         // true after checkPdsRequirements succeeds
+        pdsVerifiedHost: null,      // the host that was verified
         availableDomains: [],
         handleType: null,           // 'dns_verified' or 'pds_hosted'
         canPreserveHandle: false,   // true if custom domain handle can be preserved
@@ -519,6 +521,7 @@
 
         const btn = e.target;
         const status = document.getElementById('pds-status');
+        const inviteGroup = document.getElementById('invite-code-group');
         let selectedPds = pdsSelect.value;
 
         // If "custom" is selected, use the custom PDS field value
@@ -531,9 +534,29 @@
           return;
         }
 
+        // For custom PDS: if not yet verified, check requirements first
+        if (pdsSelect.value === 'custom' && (!wizardData.pdsVerified || wizardData.pdsVerifiedHost !== selectedPds)) {
+          btn.disabled = true;
+          btn.textContent = 'Checking PDS...';
+          checkPdsRequirements(selectedPds, status, inviteGroup, function(success) {
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+            if (success) {
+              updateTargetPasswordVisibility(selectedPds);
+              // If invite code is now required, stay on this step so user can fill it in
+              if (inviteCodeField.required) {
+                showStatus(status, 'This PDS requires an invite code. Please enter it below, then click Continue.', 'info');
+                inviteCodeField.focus();
+              }
+            }
+          });
+          return;
+        }
+
         // Check if invite code is required and empty
         if (inviteCodeField.required && !inviteCodeField.value.trim()) {
-          alert('Please enter an invite code');
+          showStatus(status, 'Please enter an invite code to continue.', 'error');
+          inviteCodeField.focus();
           return;
         }
 
@@ -643,6 +666,10 @@
         const inviteGroup = document.getElementById('invite-code-group');
         const status = document.getElementById('pds-status');
 
+        // Reset PDS verification when selection changes
+        wizardData.pdsVerified = false;
+        wizardData.pdsVerifiedHost = null;
+
         if (selectedValue === 'custom') {
           customGroup.style.display = 'block';
           customPdsField.value = '';
@@ -663,21 +690,17 @@
         }
       });
 
-      // Custom PDS
-      document.getElementById('custom-pds-continue-btn').addEventListener('click', function(e) {
-        e.preventDefault();
-        const pdsHost = customPdsField.value.trim();
-        if (!pdsHost) {
-          alert('Please enter a PDS URL');
-          return;
+      // Reset verification when user edits the custom PDS field
+      customPdsField.addEventListener('input', function() {
+        if (pdsSelect.value === 'custom') {
+          wizardData.pdsVerified = false;
+          wizardData.pdsVerifiedHost = null;
         }
-        const status = document.getElementById('custom-pds-status');
-        const inviteGroup = document.getElementById('invite-code-group');
-        checkPdsRequirements(pdsHost, status, inviteGroup);
       });
 
       // Check PDS requirements
-      function checkPdsRequirements(pdsHost, statusElement, inviteGroup) {
+      // Optional callback(success) is called when the check completes
+      function checkPdsRequirements(pdsHost, statusElement, inviteGroup, callback) {
         showStatus(statusElement, 'Checking PDS requirements...', 'info');
 
         fetch('/migrations/check_pds', {
@@ -693,6 +716,8 @@
           if (data.error) {
             showStatus(statusElement, data.error, 'error');
             inviteGroup.style.display = 'none';
+            wizardData.pdsVerified = false;
+            if (callback) callback(false);
             return;
           }
 
@@ -700,6 +725,8 @@
 
           // Store available domains for step 4
           wizardData.availableDomains = data.available_user_domains || [];
+          wizardData.pdsVerified = true;
+          wizardData.pdsVerifiedHost = pdsHost;
 
           if (data.invite_code_required) {
             inviteGroup.style.display = 'block';
@@ -710,10 +737,13 @@
             inviteCodeField.required = false;
             inviteCodeField.removeAttribute('required');
           }
+          if (callback) callback(true);
         })
         .catch(error => {
           showStatus(statusElement, 'Failed to verify PDS. Please check the URL.', 'error');
           inviteGroup.style.display = 'none';
+          wizardData.pdsVerified = false;
+          if (callback) callback(false);
         });
       }
 
@@ -1041,7 +1071,7 @@
           </div>
           <div id="progress-3" class="wizard-progress-step">
             <div class="wizard-progress-circle">3</div>
-            <div class="wizard-progress-label">PDS</div>
+            <div class="wizard-progress-label">Destination</div>
           </div>
           <div id="progress-4" class="wizard-progress-step">
             <div class="wizard-progress-circle">4</div>
@@ -1122,8 +1152,6 @@
             <%= f.label :new_pds_host, "Custom PDS URL" %>
             <%= f.text_field :new_pds_host, id: "migration_new_pds_host", placeholder: "https://pds.example.com", autocomplete: "url" %>
             <div class="helper-text">Enter the full URL of your custom PDS</div>
-            <button type="button" id="custom-pds-continue-btn" class="submit-button" style="margin-top: 12px;">Continue</button>
-            <div id="custom-pds-status" class="lookup-status"></div>
           </div>
 
           <div id="pds-status" class="lookup-status"></div>
