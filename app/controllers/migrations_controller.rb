@@ -54,6 +54,7 @@ class MigrationsController < ApplicationController
   def check_did_on_pds
     did = params[:did]&.strip
     pds_host = params[:pds_host]&.strip
+    old_pds_host = params[:old_pds_host]&.strip
 
     if did.blank?
       render json: { error: 'DID is required' }, status: :bad_request
@@ -68,6 +69,17 @@ class MigrationsController < ApplicationController
     # Normalize PDS host
     pds_host = normalize_pds_host(pds_host)
 
+    # Detect if this is a migration_in (returning to a PDS where the account originally lived).
+    # For migration_in, finding the DID on the target PDS is expected and required, not an error.
+    is_migration_in = false
+    if old_pds_host.present?
+      old_normalized = normalize_pds_host(old_pds_host)
+      new_host = pds_host.downcase.gsub(%r{https?://}, '')
+      old_host = old_normalized.downcase.gsub(%r{https?://}, '')
+      # It's a migration_in if target is bsky.social and source is not
+      is_migration_in = new_host.include?('bsky.social') && !old_host.include?('bsky.social')
+    end
+
     # Check if repo exists on the PDS
     begin
       url = "#{pds_host}/xrpc/com.atproto.repo.describeRepo"
@@ -77,17 +89,29 @@ class MigrationsController < ApplicationController
       Rails.logger.info("PDS DID check response: #{response.code} - #{response.body[0..200]}")
 
       if response.success?
-        # Active repo exists
-        Rails.logger.info("DID #{did} has active repo on #{pds_host}")
-        support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
-        render json: { exists: true, deactivated: false, support_email: support_email }
+        if is_migration_in
+          # For migration_in, an active repo on the target PDS is expected
+          Rails.logger.info("DID #{did} has active repo on #{pds_host} (migration_in - expected)")
+          render json: { exists: false }
+        else
+          # Active repo exists (unexpected for migration_out)
+          Rails.logger.info("DID #{did} has active repo on #{pds_host}")
+          support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
+          render json: { exists: true, deactivated: false, support_email: support_email }
+        end
       elsif response.code == 400
         parsed = JSON.parse(response.body) rescue {}
         if parsed['error'] == 'RepoDeactivated'
-          # Deactivated/orphaned repo exists
-          Rails.logger.info("DID #{did} has deactivated repo on #{pds_host}")
-          support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
-          render json: { exists: true, deactivated: true, support_email: support_email }
+          if is_migration_in
+            # For migration_in, a deactivated repo is also expected (account was moved away)
+            Rails.logger.info("DID #{did} has deactivated repo on #{pds_host} (migration_in - expected)")
+            render json: { exists: false }
+          else
+            # Deactivated/orphaned repo exists (unexpected for migration_out)
+            Rails.logger.info("DID #{did} has deactivated repo on #{pds_host}")
+            support_email = ENV.fetch('TARGET_PDS_SUPPORT_EMAIL', ENV.fetch('SUPPORT_EMAIL', 'support@example.com'))
+            render json: { exists: true, deactivated: true, support_email: support_email }
+          end
         else
           # DID doesn't exist
           Rails.logger.info("DID #{did} does not exist on #{pds_host}")
@@ -104,6 +128,67 @@ class MigrationsController < ApplicationController
     end
   end
 
+  # POST /migrations/verify_target_credentials
+  # Authenticate against the target PDS to verify the user's password (AJAX endpoint)
+  # Used for migration_in (returning to bsky.social) where the user must prove
+  # they can log in to their existing account on the target PDS.
+  #
+  # Params:
+  #   - pds_host: Target PDS host URL (e.g., https://bsky.social)
+  #   - did: The user's DID (used as login identifier)
+  #   - password: The user's password on the target PDS
+  #
+  # Response:
+  #   - Success: { success: true, access_token: '...', refresh_token: '...' }
+  #   - Failure: { error: 'message' }
+  def verify_target_credentials
+    pds_host = params[:pds_host]&.strip
+    did = params[:did]&.strip
+    password = params[:password]&.strip
+
+    if pds_host.blank? || did.blank? || password.blank?
+      render json: { error: 'PDS host, DID, and password are required' }, status: :bad_request
+      return
+    end
+
+    pds_host = normalize_pds_host(pds_host)
+
+    # Authenticate against the target PDS
+    session_url = "#{pds_host}/xrpc/com.atproto.server.createSession"
+    response = HTTParty.post(
+      session_url,
+      headers: { 'Content-Type' => 'application/json' },
+      body: { identifier: did, password: password }.to_json,
+      timeout: 30
+    )
+
+    unless response.success?
+      error_body = JSON.parse(response.body) rescue {}
+      error_msg = error_body['message'] || error_body['error'] || 'Authentication failed'
+
+      if error_msg.include?('Invalid identifier or password')
+        render json: { error: "Wrong password for your Bluesky account. Please enter the password you used on bsky.social." }, status: :unauthorized
+      else
+        render json: { error: "Authentication failed: #{error_msg}" }, status: :unauthorized
+      end
+      return
+    end
+
+    session_data = JSON.parse(response.body)
+
+    render json: {
+      success: true,
+      access_token: session_data['accessJwt'],
+      refresh_token: session_data['refreshJwt']
+    }
+  rescue JSON::ParserError => e
+    Rails.logger.error("Failed to parse target PDS response: #{e.message}")
+    render json: { error: "Invalid response from target PDS" }, status: :internal_server_error
+  rescue StandardError => e
+    Rails.logger.error("Failed to verify target credentials: #{e.message}")
+    render json: { error: "Failed to connect to target PDS. Please try again." }, status: :internal_server_error
+  end
+
   # POST /migrations/check_handle
   # Check if a handle is available on a PDS (AJAX endpoint)
   #
@@ -117,6 +202,7 @@ class MigrationsController < ApplicationController
   def check_handle
     handle = params[:handle]&.strip
     pds_host = params[:pds_host]&.strip
+    user_did = params[:did]&.strip  # The authenticated user's DID (for migration_in)
 
     if handle.blank?
       render json: { error: 'Handle is required' }, status: :bad_request
@@ -134,6 +220,15 @@ class MigrationsController < ApplicationController
     # Check 1: Try to resolve the handle via PLC directory
     begin
       resolution = GoatService.resolve_handle(handle)
+
+      # If the handle resolves to the same DID as the authenticated user,
+      # it's their own handle — allow them to reclaim it (migration_in scenario)
+      if user_did.present? && resolution[:did] == user_did
+        Rails.logger.info("Handle #{handle} belongs to the authenticated user (DID: #{user_did}) - available for reclaim")
+        render json: { available: true }
+        return
+      end
+
       # Handle exists in PLC - check if it's on a different PDS
       if resolution[:pds_host] == pds_host
         # Handle exists on this PDS in PLC - not available
@@ -155,9 +250,17 @@ class MigrationsController < ApplicationController
       Rails.logger.info("PDS handle check response: #{response.code} - #{response.body[0..200]}")
 
       if response.success?
-        # Handle exists on the PDS - not available
-        Rails.logger.info("Handle #{handle} exists on #{pds_host} - not available")
-        render json: { available: false }
+        # Handle exists on the PDS — check if it belongs to the authenticated user
+        parsed = JSON.parse(response.body) rescue {}
+        resolved_did = parsed['did']
+
+        if user_did.present? && resolved_did == user_did
+          Rails.logger.info("Handle #{handle} on #{pds_host} belongs to authenticated user (DID: #{user_did}) - available for reclaim")
+          render json: { available: true }
+        else
+          Rails.logger.info("Handle #{handle} exists on #{pds_host} - not available")
+          render json: { available: false }
+        end
       else
         # Handle doesn't exist on the PDS - available
         Rails.logger.info("Handle #{handle} does not exist on #{pds_host} - available")
@@ -367,19 +470,39 @@ class MigrationsController < ApplicationController
         return
       end
 
-      # Generate a secure random password for the new account
-      # This will be emailed to the user after migration completes (NOT immediately)
-      new_account_password = SecureRandom.urlsafe_base64(16) # ~128 bits of entropy
-      @migration.password = new_account_password  # Lockbox encrypts this
       @migration.credentials_expires_at = 48.hours.from_now
 
       # Store old PDS tokens (encrypted via Lockbox)
       @migration.old_access_token = old_access_token
       @migration.old_refresh_token = old_refresh_token
 
-      # Track password generation time (for auditing), but NOT the password itself
       @migration.progress_data ||= {}
-      @migration.progress_data['password_generated_at'] = Time.current.iso8601
+
+      if @migration.migration_type == 'migration_in'
+        # For migration_in, store the target PDS tokens (verified in the wizard)
+        new_access_token = params[:migration][:new_access_token]
+        new_refresh_token = params[:migration][:new_refresh_token]
+
+        if new_access_token.blank? || new_refresh_token.blank?
+          @migration.errors.add(:base, "Target PDS authentication tokens are missing. Please go back and verify your bsky.social credentials.")
+          render :new, status: :unprocessable_entity
+          return
+        end
+
+        @migration.new_access_token = new_access_token
+        @migration.new_refresh_token = new_refresh_token
+
+        # No generated password for migration_in — the user keeps their existing password
+        Rails.logger.info("Migration_in: stored target PDS tokens for #{@migration.new_pds_host}")
+      else
+        # For migration_out, generate a secure random password for the new account
+        # This will be emailed to the user after migration completes (NOT immediately)
+        new_account_password = SecureRandom.urlsafe_base64(16) # ~128 bits of entropy
+        @migration.password = new_account_password  # Lockbox encrypts this
+
+        # Track password generation time (for auditing), but NOT the password itself
+        @migration.progress_data['password_generated_at'] = Time.current.iso8601
+      end
 
       # Set the invite code if provided and enabled (Lockbox encrypts automatically)
       if EuroskyConfig.invite_code_enabled? && params[:migration][:invite_code].present?
@@ -942,6 +1065,8 @@ class MigrationsController < ApplicationController
     # These are accessed directly in the create action (not mass-assigned) for encryption handling
     allowed << :old_access_token
     allowed << :old_refresh_token
+    allowed << :new_access_token
+    allowed << :new_refresh_token
     allowed << :invite_code if EuroskyConfig.invite_code_enabled?
 
     params.require(:migration).permit(*allowed)

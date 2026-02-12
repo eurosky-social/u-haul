@@ -26,6 +26,16 @@ class Migration < ApplicationRecord
       return nil if credentials_expired?
       super
     end
+
+    def new_access_token
+      return nil if credentials_expired?
+      super
+    end
+
+    def new_refresh_token
+      return nil if credentials_expired?
+      super
+    end
   end
   # Enums
   enum :status, {
@@ -63,6 +73,8 @@ class Migration < ApplicationRecord
   has_encrypted :plc_otp, key: lockbox_key, encrypted_attribute: :encrypted_plc_otp
   has_encrypted :old_access_token, key: lockbox_key, encrypted_attribute: :encrypted_old_access_token
   has_encrypted :old_refresh_token, key: lockbox_key, encrypted_attribute: :encrypted_old_refresh_token
+  has_encrypted :new_access_token, key: lockbox_key, encrypted_attribute: :encrypted_new_access_token
+  has_encrypted :new_refresh_token, key: lockbox_key, encrypted_attribute: :encrypted_new_refresh_token
 
   # Prepend the expiration check module AFTER Lockbox has defined its methods
   prepend ExpirationChecks
@@ -302,6 +314,8 @@ class Migration < ApplicationRecord
       encrypted_plc_token: nil,
       encrypted_old_access_token: nil,
       encrypted_old_refresh_token: nil,
+      encrypted_new_access_token: nil,
+      encrypted_new_refresh_token: nil,
       credentials_expires_at: nil
     )
     Rails.logger.info("Cleared encrypted credentials for migration #{token}")
@@ -331,6 +345,24 @@ class Migration < ApplicationRecord
       encrypted_old_refresh_token: nil
     )
     Rails.logger.info("Cleared old PDS tokens for migration #{token}")
+  end
+
+  # New (target) PDS token management — used for migration_in when the user
+  # authenticates against their existing account on the target PDS (e.g. bsky.social)
+  def set_new_pds_tokens!(access_token:, refresh_token:)
+    self.new_access_token = access_token
+    self.new_refresh_token = refresh_token
+    save!
+  end
+
+  def update_new_pds_tokens!(access_token:, refresh_token:)
+    self.new_access_token = access_token
+    self.new_refresh_token = refresh_token
+    save!
+  end
+
+  def has_new_pds_tokens?
+    encrypted_new_refresh_token.present?
   end
 
   # Invite code management

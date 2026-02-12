@@ -410,8 +410,9 @@
             wizardData.emailReadonly = false;
           }
 
-          // Store DID and authentication tokens (will be submitted with form)
+          // Store DID, source PDS, and authentication tokens (will be submitted with form)
           wizardData.did = data.did;
+          wizardData.oldPdsHost = data.pds_host;
           wizardData.accessToken = data.access_token;
           wizardData.refreshToken = data.refresh_token;
 
@@ -501,6 +502,7 @@
           const status = document.getElementById('pds-status');
           const inviteGroup = document.getElementById('invite-code-group');
           checkPdsRequirements(defaultTargetPds, status, inviteGroup);
+          updateTargetPasswordVisibility(defaultTargetPds);
         }
       }
 
@@ -535,11 +537,104 @@
           return;
         }
 
+        // For migration_in (returning to bsky.social), verify target PDS credentials
+        if (isMigrationIn(selectedPds)) {
+          const targetPassword = document.getElementById('target-pds-password').value.trim();
+          const targetStatus = document.getElementById('target-password-status');
+
+          if (!targetPassword) {
+            showStatus(targetStatus, 'Please enter your bsky.social password', 'error');
+            return;
+          }
+
+          // If already verified, proceed
+          if (wizardData.targetCredentialsVerified) {
+            wizardData.pdsHost = selectedPds;
+            showStep(4);
+            setupStep4();
+            return;
+          }
+
+          btn.disabled = true;
+          btn.textContent = 'Verifying bsky.social credentials...';
+          showStatus(targetStatus, 'Authenticating with your bsky.social account...', 'info');
+
+          fetch('/migrations/verify_target_credentials', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({
+              pds_host: selectedPds,
+              did: wizardData.did,
+              password: targetPassword
+            })
+          })
+          .then(response => response.json())
+          .then(data => {
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+
+            if (data.error) {
+              showStatus(targetStatus, data.error, 'error');
+              return;
+            }
+
+            // Store target PDS tokens
+            wizardData.targetCredentialsVerified = true;
+            wizardData.newPdsAccessToken = data.access_token;
+            wizardData.newPdsRefreshToken = data.refresh_token;
+
+            showStatus(targetStatus, 'bsky.social credentials verified!', 'success');
+
+            // Proceed to step 4
+            setTimeout(() => {
+              wizardData.pdsHost = selectedPds;
+              showStep(4);
+              setupStep4();
+            }, 500);
+          })
+          .catch(error => {
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+            showStatus(targetStatus, 'Network error. Please try again.', 'error');
+          });
+          return;
+        }
+
         // All checks passed, store PDS and proceed to step 4
         wizardData.pdsHost = selectedPds;
         showStep(4);
         setupStep4();
       });
+
+      // Helper: Check if selecting this PDS makes it a migration_in scenario
+      function isMigrationIn(pdsUrl) {
+        if (!pdsUrl || !wizardData.oldPdsHost) return false;
+        const targetHost = pdsUrl.toLowerCase().replace(/^https?:\/\//, '');
+        const sourceHost = wizardData.oldPdsHost.toLowerCase().replace(/^https?:\/\//, '');
+        return targetHost.includes('bsky.social') && !sourceHost.includes('bsky.social');
+      }
+
+      // Helper: Show/hide the target password group based on migration_in detection
+      function updateTargetPasswordVisibility(pdsUrl) {
+        const targetPasswordGroup = document.getElementById('target-password-group');
+        const targetPasswordStatus = document.getElementById('target-password-status');
+        if (isMigrationIn(pdsUrl)) {
+          targetPasswordGroup.style.display = 'block';
+          // Reset verification state
+          wizardData.targetCredentialsVerified = false;
+          wizardData.newPdsAccessToken = null;
+          wizardData.newPdsRefreshToken = null;
+          targetPasswordStatus.style.display = 'none';
+        } else {
+          targetPasswordGroup.style.display = 'none';
+          wizardData.targetCredentialsVerified = false;
+          wizardData.newPdsAccessToken = null;
+          wizardData.newPdsRefreshToken = null;
+        }
+      }
 
       // PDS selection
       pdsSelect.addEventListener('change', function(e) {
@@ -554,14 +649,17 @@
           customPdsField.focus();
           inviteGroup.style.display = 'none';
           status.style.display = 'none';
+          updateTargetPasswordVisibility(null);
         } else if (selectedValue) {
           customGroup.style.display = 'none';
           customPdsField.value = selectedValue;
           checkPdsRequirements(selectedValue, status, inviteGroup);
+          updateTargetPasswordVisibility(selectedValue);
         } else {
           customGroup.style.display = 'none';
           inviteGroup.style.display = 'none';
           status.style.display = 'none';
+          updateTargetPasswordVisibility(null);
         }
       });
 
@@ -738,7 +836,7 @@
         btn.textContent = 'Checking availability...';
         showStatus(status, 'Checking if handle is available...', 'info');
 
-        // Check handle availability
+        // Check handle availability (pass DID so the user can reclaim their own handle)
         fetch('/migrations/check_handle', {
           method: 'POST',
           headers: {
@@ -747,7 +845,8 @@
           },
           body: JSON.stringify({
             handle: fullHandle,
-            pds_host: wizardData.pdsHost
+            pds_host: wizardData.pdsHost,
+            did: wizardData.did
           })
         })
         .then(response => response.json())
@@ -778,7 +877,8 @@
             },
             body: JSON.stringify({
               did: wizardData.did,
-              pds_host: wizardData.pdsHost
+              pds_host: wizardData.pdsHost,
+              old_pds_host: wizardData.oldPdsHost
             })
           })
           .then(response => response.json())
@@ -890,8 +990,14 @@
           document.getElementById('migration_old_access_token').value = wizardData.accessToken || '';
           document.getElementById('migration_old_refresh_token').value = wizardData.refreshToken || '';
 
-          // Clear password field before submission (we're using tokens instead)
+          // For migration_in, also populate target PDS tokens
+          document.getElementById('migration_new_access_token').value = wizardData.newPdsAccessToken || '';
+          document.getElementById('migration_new_refresh_token').value = wizardData.newPdsRefreshToken || '';
+
+          // Clear password fields before submission (we're using tokens instead)
           passwordField.value = '';
+          const targetPwdField = document.getElementById('target-pds-password');
+          if (targetPwdField) targetPwdField.value = '';
 
           form.submit();
         }
@@ -1027,6 +1133,25 @@
             <%= f.text_field :invite_code, id: "migration_invite_code", placeholder: "Enter your invite code", autocomplete: "off" %>
             <div class="helper-text">This PDS requires an invite code</div>
           </div>
+
+          <!-- Target PDS password (for migration_in / returning to bsky.social) -->
+          <div id="target-password-group" style="display: none; margin-top: 24px; padding: 20px; background: #fff8e1; border: 2px solid #ffc107; border-radius: 8px;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px; color: #f57f17;">Returning to Bluesky</h3>
+            <p style="margin: 0 0 16px 0; font-size: 14px; color: #555; line-height: 1.5;">
+              Since you're migrating back to bsky.social, we need to verify your old Bluesky password.
+              This is the password you used before you migrated away.
+            </p>
+            <div class="form-group" style="margin: 0;">
+              <label for="target-pds-password">Your bsky.social Password</label>
+              <input type="password" id="target-pds-password" class="form-control" placeholder="Enter your old bsky.social password" autocomplete="current-password">
+              <div class="helper-text">The password for your original Bluesky account</div>
+            </div>
+            <div id="target-password-status" class="lookup-status"></div>
+          </div>
+
+          <!-- Hidden fields for target PDS tokens (populated by JS after verification) -->
+          <%= hidden_field_tag 'migration[new_access_token]', '', id: 'migration_new_access_token' %>
+          <%= hidden_field_tag 'migration[new_refresh_token]', '', id: 'migration_new_refresh_token' %>
 
           <div class="wizard-navigation">
             <button type="button" id="step3-back" class="wizard-back-btn">Back</button>

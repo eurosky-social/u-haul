@@ -988,13 +988,51 @@ class GoatService
   end
 
   # Returns a cached PdsClient for the new (target) PDS
+  # For migration_in, uses stored tokens (like old_pds_client) instead of password
   def new_pds_client
     @pds_clients ||= {}
-    @pds_clients[:new_pds] ||= create_pds_client(
-      host: migration.new_pds_host,
-      identifier: migration.did,
-      password: migration.password
+    @pds_clients[:new_pds] ||= if migration.has_new_pds_tokens?
+      create_new_pds_token_client
+    else
+      create_pds_client(
+        host: migration.new_pds_host,
+        identifier: migration.did,
+        password: migration.password
+      )
+    end
+  end
+
+  # Creates a token-authenticated client for the new (target) PDS
+  # Used for migration_in where we have pre-authenticated tokens from the wizard
+  def create_new_pds_token_client
+    logger.info("Creating token-authenticated client for new PDS: #{migration.new_pds_host}")
+
+    refresh_token = migration.new_refresh_token
+    raise AuthenticationError, "No new PDS refresh token available" if refresh_token.blank?
+
+    # Refresh to get fresh tokens
+    tokens = refresh_session_with_token(host: migration.new_pds_host, refresh_token: refresh_token)
+
+    # Persist rotated tokens
+    migration.update_new_pds_tokens!(
+      access_token: tokens[:access_token],
+      refresh_token: tokens[:refresh_token]
     )
+
+    client = TokenPdsClient.new(
+      migration.new_pds_host,
+      migration.did,
+      access_token: tokens[:access_token],
+      refresh_token: tokens[:refresh_token],
+      on_token_refresh: ->(access, refresh) {
+        migration.update_new_pds_tokens!(access_token: access, refresh_token: refresh)
+      }
+    )
+
+    logger.info("Token-authenticated client created for new PDS")
+    client
+  rescue StandardError => e
+    raise AuthenticationError, "Failed to create token-authenticated client for new PDS: #{e.message}"
   end
 
   # Creates a new PdsClient and authenticates
@@ -1135,6 +1173,11 @@ class GoatService
 
   # Detect if a handle is DNS-verified (custom domain) or PDS-hosted
   # Returns a hash with { type: 'dns_verified' | 'pds_hosted', verified_via: 'dns' | 'http_wellknown' | 'pds_api' }
+  #
+  # A handle is PDS-hosted if its domain suffix matches the PDS hostname
+  # (e.g., user.pds.example.com is hosted by pds.example.com).
+  # A handle is DNS-verified (custom domain) only if the user owns the domain
+  # independently of any PDS.
   def self.detect_handle_type(handle)
     Rails.logger.info("Detecting handle type for: #{handle}")
 
@@ -1152,6 +1195,19 @@ class GoatService
     # If handle ends with known PDS-hosted suffix, it's definitely PDS-hosted
     if pds_hosted_suffixes.any? { |suffix| domain.end_with?(suffix) }
       Rails.logger.info("Handle #{handle} identified as PDS-hosted (known suffix)")
+      return {
+        type: 'pds_hosted',
+        verified_via: 'pds_api',
+        can_preserve: false,
+        reason: 'This handle is hosted by the PDS provider and cannot be transferred'
+      }
+    end
+
+    # Check if the handle's domain suffix matches the source PDS hostname.
+    # For handles like "user.pds.example.com", the PDS is "pds.example.com".
+    # These are PDS-hosted handles even though they have DNS records (set by the PDS).
+    if handle_matches_source_pds?(domain)
+      Rails.logger.info("Handle #{handle} identified as PDS-hosted (domain suffix matches source PDS)")
       return {
         type: 'pds_hosted',
         verified_via: 'pds_api',
@@ -1224,6 +1280,36 @@ class GoatService
       can_preserve: false,
       reason: 'Could not verify handle type'
     }
+  end
+
+  # Check if a handle's domain suffix matches its source PDS hostname.
+  # PDS-hosted handles use the PDS hostname as their domain suffix
+  # (e.g., "user.pds.example.com" is hosted by "pds.example.com").
+  # This distinguishes PDS-hosted handles from genuinely user-owned custom domains.
+  def self.handle_matches_source_pds?(handle)
+    parts = handle.split('.')
+    return false if parts.length < 3
+
+    # Try to resolve the handle to find its PDS
+    begin
+      did = resolve_handle_to_did(handle)
+      pds_host = resolve_did_to_pds(did)
+
+      # Extract hostname from PDS URL
+      pds_hostname = URI.parse(pds_host).host&.downcase
+      return false unless pds_hostname
+
+      # Check if the handle's domain suffix matches the PDS hostname
+      # e.g., "euro11-06.pds.local.theeverythingapp.de" ends with "pds.local.theeverythingapp.de"
+      handle.end_with?(".#{pds_hostname}")
+    rescue StandardError => e
+      Rails.logger.debug("Could not check PDS match for #{handle}: #{e.message}")
+
+      # Fallback: check if the handle looks like it's hosted on a PDS
+      # by checking if removing the first part gives a hostname with "pds" in it
+      suffix = parts[1..].join('.')
+      suffix.include?('pds.') || suffix.start_with?('pds.')
+    end
   end
 
   # Convenience method to resolve handle directly to PDS host
