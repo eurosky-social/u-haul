@@ -415,6 +415,7 @@ en:
       # Create
       legal_consent_required: "You must agree to the Terms of Service and acknowledge the Privacy Policy to continue."
       verification_sent: "We've sent a verification code to %{email}. Enter it on the next page to start your migration."
+      email_mismatch: "must match the email on your source account"
       # Verify email
       email_verified: "Email verified! Your migration has started."
       invalid_code: "Invalid verification code. Please check the code in your email and try again."
