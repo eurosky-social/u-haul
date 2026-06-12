@@ -85,6 +85,26 @@ class StuckMigrationSweeperJobTest < ActiveSupport::TestCase
     end
   end
 
+  # Regression: a long-running blob transfer (hours) only appears in the busy
+  # WorkSet, not in Queue/Scheduled/Retry. Before the WorkSet check, the
+  # sweeper treated it as orphaned and re-enqueued a DUPLICATE every cycle,
+  # piling up concurrent jobs that overwhelmed the destination PDS.
+  test "does not re-enqueue if migration has a currently-running job (WorkSet)" do
+    migration = Migration.create!(@valid_attributes.merge(
+      did: "did:plc:sweeperrunning",
+      status: :pending_blobs
+    ))
+    # Idle by updated_at (large transfer bumps it infrequently), yet the job
+    # is actively executing on a worker.
+    migration.update_columns(updated_at: 30.minutes.ago)
+
+    stub_sidekiq_workset_with_migration_id(migration.id)
+
+    assert_no_enqueued_jobs(only: ImportBlobsJob) do
+      StuckMigrationSweeperJob.perform_now
+    end
+  end
+
   test "skips migrations at pending_plc (waiting for user action)" do
     migration = Migration.create!(@valid_attributes.merge(
       did: "did:plc:sweeperplc",
@@ -175,6 +195,7 @@ class StuckMigrationSweeperJobTest < ActiveSupport::TestCase
     Sidekiq::Queue.stubs(:all).returns([])
     Sidekiq::ScheduledSet.stubs(:new).returns(empty_queue)
     Sidekiq::RetrySet.stubs(:new).returns(empty_queue)
+    Sidekiq::WorkSet.stubs(:new).returns(empty_queue)
   end
 
   def stub_sidekiq_queues_with_migration_id(migration_id)
@@ -190,5 +211,21 @@ class StuckMigrationSweeperJobTest < ActiveSupport::TestCase
     Sidekiq::Queue.stubs(:all).returns([queue])
     Sidekiq::ScheduledSet.stubs(:new).returns([])
     Sidekiq::RetrySet.stubs(:new).returns([])
+    Sidekiq::WorkSet.stubs(:new).returns([])
+  end
+
+  # Simulate a job currently EXECUTING on a busy worker for the given migration.
+  # WorkSet#each yields (process_id, thread_id, work), where work responds to
+  # #payload with the raw Sidekiq job hash (args = ActiveJob wrapper).
+  def stub_sidekiq_workset_with_migration_id(migration_id)
+    work = stub(payload: { 'args' => [{ 'arguments' => [migration_id] }] })
+
+    workset = stub
+    workset.stubs(:each).yields('process-id', 'thread-id', work)
+
+    Sidekiq::Queue.stubs(:all).returns([])
+    Sidekiq::ScheduledSet.stubs(:new).returns([])
+    Sidekiq::RetrySet.stubs(:new).returns([])
+    Sidekiq::WorkSet.stubs(:new).returns(workset)
   end
 end

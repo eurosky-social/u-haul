@@ -1,7 +1,8 @@
 # StuckMigrationSweeperJob - Safety net for orphaned migrations
 #
 # Periodically checks for migrations that are stuck in a pending_* status
-# with no corresponding Sidekiq job queued, scheduled, or retrying.
+# with no corresponding Sidekiq job queued, scheduled, retrying, or currently
+# executing (running on a busy worker).
 #
 # Root cause: the advance_to_* methods update the DB status and then enqueue
 # the next job. If the enqueue fails (Redis hiccup, connection pool exhaustion),
@@ -15,9 +16,13 @@
 class StuckMigrationSweeperJob < ApplicationJob
   queue_as :low
 
-  # How long a migration must be idle before we consider it stuck.
-  # Must be long enough to avoid re-enqueuing jobs that are legitimately
-  # in progress (e.g., a large blob transfer can take several minutes).
+  # How long a migration must be idle (updated_at) before we consider it stuck.
+  # A large blob transfer can legitimately run for HOURS while bumping
+  # updated_at only every N blobs, so updated_at alone is NOT a reliable
+  # "is it running" signal — the WorkSet check in
+  # collect_active_sidekiq_migration_ids is the real guard against
+  # re-enqueuing an in-flight job. This threshold only gates how quickly a
+  # genuinely orphaned (no Sidekiq job anywhere) migration gets rescued.
   STUCK_THRESHOLD = 10.minutes
 
   # Statuses that should have an active job processing them.
@@ -69,8 +74,14 @@ class StuckMigrationSweeperJob < ApplicationJob
              .where("updated_at < ?", STUCK_THRESHOLD.ago)
   end
 
-  # Scan all Sidekiq queues, scheduled set, and retry set to find
-  # which migration IDs have a job in flight.
+  # Scan all Sidekiq queues, the scheduled set, the retry set, AND the set of
+  # currently-executing jobs (WorkSet) to find which migration IDs already have
+  # a job in flight.
+  #
+  # The WorkSet (busy workers) check is critical: blob transfers run for many
+  # minutes to hours. Without it, the sweeper treats a still-running job as
+  # missing and enqueues a duplicate every cycle, piling up concurrent jobs
+  # that all re-upload the same blobs and overwhelm the destination PDS.
   def collect_active_sidekiq_migration_ids
     ids = Set.new
 
@@ -94,6 +105,14 @@ class StuckMigrationSweeperJob < ApplicationJob
       ids.add(migration_id) if migration_id
     end
 
+    # Check currently-executing jobs (busy workers). These are NOT in any of
+    # the sets above while they run, so this is the only thing preventing the
+    # sweeper from duplicating a long-running blob transfer.
+    Sidekiq::WorkSet.new.each do |_process_id, _thread_id, work|
+      migration_id = extract_migration_id_from_work(work)
+      ids.add(migration_id) if migration_id
+    end
+
     ids
   end
 
@@ -107,6 +126,25 @@ class StuckMigrationSweeperJob < ApplicationJob
     elsif args.is_a?(Array)
       args.first
     end
+  end
+
+  # WorkSet entries expose the raw Sidekiq job payload rather than ActiveJob
+  # args. Depending on the Sidekiq version, each yielded `work` is either a
+  # Sidekiq::Work (responding to #payload) or a Hash with a "payload" key, and
+  # the payload itself is either a JSON string or an already-parsed Hash.
+  # Normalize all of those, then dig out the ActiveJob migration_id.
+  def extract_migration_id_from_work(work)
+    payload = work.respond_to?(:payload) ? work.payload : work['payload']
+    payload = JSON.parse(payload) if payload.is_a?(String)
+    return nil unless payload.is_a?(Hash)
+
+    args = payload['args']
+    return nil unless args.is_a?(Array) && args.first.is_a?(Hash)
+
+    args.first.dig('arguments')&.first
+  rescue JSON::ParserError => e
+    logger.warn("[Sweeper] Could not parse WorkSet payload: #{e.message}")
+    nil
   end
 
   def enqueue_job_for_status(migration)
