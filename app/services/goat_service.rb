@@ -1018,6 +1018,20 @@ class GoatService
 
     logger.info("Token-authenticated client created for new PDS")
     client
+  rescue Minisky::ClientErrorResponse => e
+    # The stored refresh token was rejected by the PDS (e.g. "Token has been
+    # revoked" / ExpiredToken). ATProto refresh tokens are single-use and can be
+    # burned by job retries or sweeper re-enqueue races, leaving the migration
+    # holding a stale token. When we still have the account password (always the
+    # case for migration_out), recover by performing a fresh createSession login
+    # instead of failing the whole migration. This persists new tokens that
+    # subsequent jobs reuse.
+    if migration.password.present?
+      logger.warn("New PDS token rejected (#{e.message}); falling back to password login")
+      create_new_pds_password_client
+    else
+      raise AuthenticationError, "Failed to create token-authenticated client for new PDS: #{e.message}"
+    end
   rescue StandardError => e
     raise AuthenticationError, "Failed to create token-authenticated client for new PDS: #{e.message}"
   end
