@@ -909,10 +909,13 @@ class MigrationsController < ApplicationController
         refresh_token: session_data['refreshJwt']
       )
 
-      # Also re-store the password — it's needed for logging in to the new PDS
-      # during the PLC update step (the new PDS account uses the same password).
-      @migration.password = password
-      @migration.save!
+      # NOTE: Do NOT overwrite @migration.password here. This form takes the
+      # user's OLD PDS password (used above to log into the old PDS), whereas
+      # @migration.password is the freshly generated NEW account password
+      # (see #create, SecureRandom.urlsafe_base64). Overwriting it with the old
+      # password breaks every later new-PDS login with "Invalid identifier or
+      # password". The old password is only needed transiently for the session
+      # above; we keep only the resulting tokens.
 
       Rails.logger.info("Re-authenticated with old PDS for migration #{@migration.token}")
 
