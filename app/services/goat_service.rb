@@ -479,12 +479,16 @@ class GoatService
     url = "#{migration.old_pds_host}/xrpc/com.atproto.sync.listBlobs?did=#{migration.did}"
     url += "&cursor=#{cursor}" if cursor
 
-    # com.atproto.sync.listBlobs is a public endpoint - no authentication required
+    # com.atproto.sync.listBlobs is normally public, but a PDS stops serving a
+    # repo's sync data once the account is deactivated (RepoDeactivated) — which
+    # is the state the old PDS is in when a user retries missing blobs after the
+    # migration has finished. The PDS still serves a deactivated repo to the
+    # authenticated *owner* (or an admin), so we attach the owner's Bearer token
+    # when it's available. Best-effort: falls back to an unauthenticated request
+    # (the old PDS is still active during the normal migration).
     response = HTTParty.get(
       url,
-      headers: {
-        'Accept' => 'application/json'
-      },
+      headers: old_pds_read_headers('Accept' => 'application/json'),
       timeout: 30
     )
 
@@ -535,7 +539,13 @@ class GoatService
 
     request = Net::HTTP::Get.new(uri)
 
-    # com.atproto.sync.getBlob is a public endpoint - no authentication required
+    # com.atproto.sync.getBlob is normally public, but a deactivated repo is only
+    # served to the authenticated owner (or admin). Attach the owner's Bearer
+    # token when available so retrying missing blobs works even after the old
+    # PDS has been deactivated (the normal migration runs while it's still
+    # active, where the header is simply ignored/optional).
+    old_pds_read_headers.each { |k, v| request[k] = v }
+
     http.request(request) do |response|
       unless response.is_a?(Net::HTTPSuccess)
         if response.code.to_i == 429
@@ -970,6 +980,24 @@ class GoatService
     parsed['did']
   rescue StandardError => e
     raise NetworkError, "Failed to get PDS service DID: #{e.message}"
+  end
+
+  # Headers for reads from the old PDS's sync endpoints (getBlob/listBlobs).
+  # Once the old account is deactivated (which is the case when a user retries
+  # missing blobs after the migration completes), the PDS only serves the repo's
+  # sync data to the authenticated owner or an admin — an anonymous request gets
+  # RepoDeactivated. We therefore attach the owner's Bearer token when a valid
+  # old-PDS session is available. Best-effort: if no session can be established
+  # (e.g. credentials already cleared), the base headers are returned unchanged
+  # and the caller surfaces the PDS's error. The old-PDS refresh token keeps
+  # working on a deactivated account, so this needs no password.
+  def old_pds_read_headers(base = {})
+    return base unless migration.has_old_pds_tokens?
+    token = old_pds_client.config['access_token']
+    token.present? ? base.merge('Authorization' => "Bearer #{token}") : base
+  rescue StandardError => e
+    logger.warn("Could not obtain old PDS owner token for authenticated read: #{e.message}")
+    base
   end
 
   # PDS client management using minisky
