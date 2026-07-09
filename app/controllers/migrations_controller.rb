@@ -409,6 +409,9 @@ class MigrationsController < ApplicationController
     two_factor_code = params[:two_factor_code]&.strip
     account_details = authenticate_and_fetch_profile(pds_host, handle, password, auth_factor_token: two_factor_code)
 
+    # Store the verified email server-side so create can validate against it
+    session[:authenticated_pds_email] = account_details[:email]
+
     render json: {
       did: did,
       pds_host: pds_host,
@@ -455,6 +458,26 @@ class MigrationsController < ApplicationController
   #   - Failure: Re-renders form with errors
   def create
     @migration = Migration.new(migration_params)
+
+    # Cross-check submitted email against the PDS-authenticated session email.
+    # session[:authenticated_pds_email] was set during the lookup_handle step.
+    # If it's missing, the user bypassed the wizard or their session expired.
+    authenticated_email = session[:authenticated_pds_email]
+
+    if authenticated_email.blank?
+      @migration.errors.add(:base, I18n.t('controllers.migrations.session_expired'))
+      render :new, status: :unprocessable_entity
+      return
+    end
+
+    unless @migration.email.downcase.strip == authenticated_email.downcase.strip
+      @migration.errors.add(:email, I18n.t('controllers.migrations.email_mismatch'))
+      render :new, status: :unprocessable_entity
+      return
+    end
+
+    # Clear the session value — it has served its purpose
+    session.delete(:authenticated_pds_email)
 
     begin
       # Sanitize ALL user inputs by removing invisible Unicode characters and trimming whitespace
