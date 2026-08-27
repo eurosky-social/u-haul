@@ -469,6 +469,7 @@ en:
       invalid_pds_response: "Invalid response from target PDS"
       pds_connect_failed: "Failed to connect to target PDS. Please try again."
       resolve_failed: "Could not resolve handle. Please check that the handle is correct."
+      resolve_unavailable: "We could not reach the network to look up that handle. This is a problem on our side, not with your handle. Please try again in a moment."
       auth_check_failed: "Authentication failed. Please check your password."
       unexpected_error: "An unexpected error occurred. Please try again."
       unexpected_error_detail: "An unexpected error occurred: %{error}"

@@ -220,8 +220,9 @@ class MigrationsController < ApplicationController
         return
       end
       # Handle exists on different PDS in PLC - continue to check actual PDS
-    rescue GoatService::NetworkError
-      # Handle doesn't exist in PLC - continue to check actual PDS
+    rescue GoatService::HandleNotFoundError, GoatService::NetworkError
+      # Either the handle isn't in PLC, or we couldn't reach PLC to ask.
+      # Both fall through to querying the target PDS directly below.
     end
 
     # Check 2: Query the target PDS directly to check for orphaned accounts
@@ -424,9 +425,16 @@ class MigrationsController < ApplicationController
   rescue GoatService::TwoFactorRequiredError => e
     Rails.logger.info("2FA required for handle #{handle}: #{e.message}")
     render json: { two_factor_required: true, error: e.message }, status: :unauthorized
-  rescue GoatService::NetworkError => e
-    Rails.logger.error("Failed to resolve handle #{handle}: #{e.message}")
+  rescue GoatService::HandleNotFoundError => e
+    Rails.logger.info("Handle not found: #{handle}: #{e.message}")
     render json: { error: I18n.t('controllers.migrations.resolve_failed') }, status: :not_found
+  rescue GoatService::NetworkError => e
+    # Not the user's fault: we could not reach DNS or the directories to ask.
+    # Answering 404 "check that the handle is correct" here sent users hunting
+    # for a typo that did not exist through the whole 2026-08-21 outage.
+    Rails.logger.error("Handle resolution unavailable for #{handle}: #{e.message}")
+    render json: { error: I18n.t('controllers.migrations.resolve_unavailable') },
+           status: :service_unavailable
   rescue AuthenticationError => e
     Rails.logger.error("Authentication failed for handle #{handle}: #{e.message}")
     error_msg = e.message == I18n.t('controllers.migrations.app_password_not_allowed') ? e.message : I18n.t('controllers.migrations.auth_check_failed')
@@ -618,9 +626,13 @@ class MigrationsController < ApplicationController
       else
         render :new, status: :unprocessable_entity
       end
-    rescue GoatService::NetworkError => e
-      Rails.logger.error("Failed to resolve handle #{@migration.old_handle}: #{e.message}")
+    rescue GoatService::HandleNotFoundError => e
+      Rails.logger.info("Handle not found: #{@migration.old_handle}: #{e.message}")
       @migration.errors.add(:old_handle, I18n.t('controllers.migrations.resolve_failed'))
+      render :new, status: :unprocessable_entity
+    rescue GoatService::NetworkError => e
+      Rails.logger.error("Handle resolution unavailable for #{@migration.old_handle}: #{e.message}")
+      @migration.errors.add(:base, I18n.t('controllers.migrations.resolve_unavailable'))
       render :new, status: :unprocessable_entity
     rescue StandardError => e
       Rails.logger.error("Unexpected error during migration creation: #{e.message}")

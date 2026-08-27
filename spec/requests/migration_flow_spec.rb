@@ -129,10 +129,10 @@ RSpec.describe "Migration Flow", type: :request do
   end
 
   describe "Error scenarios" do
-    context "when handle resolution fails" do
+    context "when the handle does not exist" do
       before do
         allow(GoatService).to receive(:resolve_handle).and_raise(
-          GoatService::NetworkError, 'Could not resolve handle'
+          GoatService::HandleNotFoundError, 'Could not resolve handle'
         )
       end
 
@@ -148,7 +148,34 @@ RSpec.describe "Migration Flow", type: :request do
         }
 
         expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.body).to include("could not be resolved")
+        expect(response.body).to include(
+          ERB::Util.html_escape(I18n.t('controllers.migrations.resolve_failed'))
+        )
+      end
+    end
+
+    context "when handle resolution is unavailable" do
+      before do
+        allow(GoatService).to receive(:resolve_handle).and_raise(
+          GoatService::NetworkError, 'DNS resolution failed'
+        )
+      end
+
+      it "tells the user it is our problem, not their handle" do
+        post "/migrations", params: {
+          migration: {
+            email: user_email,
+            old_handle: old_handle,
+            new_handle: new_handle,
+            new_pds_host: new_pds_host,
+            password: password
+          }
+        }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include(
+          ERB::Util.html_escape(I18n.t('controllers.migrations.resolve_unavailable'))
+        )
       end
     end
 
