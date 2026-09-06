@@ -78,6 +78,7 @@
 </head>
 <body>
   <div class="container">
+    <% missing_blobs = @migration.progress_data['failed_blobs'] || [] %>
     <div class="success-icon">✅</div>
     <h1><%= t('mailers.migration_completed.heading') %></h1>
 
@@ -89,7 +90,11 @@
       <h2 style="margin-top: 0; color: #1e40af; font-size: 18px;"><%= t('mailers.migration_completed.password_heading') %></h2>
       <p><%= t('mailers.migration_completed.password_help') %></p>
       <div style="background-color: #f3f4f6; border: 2px solid #d1d5db; border-radius: 6px; padding: 16px; margin: 12px 0; font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; text-align: center; word-break: break-all; color: #3b82f6; user-select: all; -webkit-user-select: all;"><%= @password %></div>
-      <p style="font-size: 14px; color: #6b7280; margin-bottom: 0;"><strong><%= t('mailers.migration_completed.save_password') %></strong> <%= t('mailers.migration_completed.change_password') %></p>
+      <% if missing_blobs.any? %>
+        <p style="font-size: 14px; color: #991b1b; margin-bottom: 0;"><strong><%= t('mailers.migration_completed.save_password') %></strong> <strong><%= t('mailers.migration_completed.change_password_wait') %></strong></p>
+      <% else %>
+        <p style="font-size: 14px; color: #6b7280; margin-bottom: 0;"><strong><%= t('mailers.migration_completed.save_password') %></strong> <%= t('mailers.migration_completed.change_password') %></p>
+      <% end %>
     </div>
     <% end %>
 
@@ -145,10 +150,24 @@
       <p style="font-size: 14px; color: #78350f; margin-bottom: 0;"><%= t('mailers.migration_completed.hosting_miss') %></p>
     </div>
 
+    <% missing_blobs = @migration.progress_data['failed_blobs'] || [] %>
+    <% if missing_blobs.any? %>
+    <!-- Files still being transferred -->
+    <div style="background-color: #fffbeb; border: 2px solid #f59e0b; border-radius: 6px; padding: 20px; margin: 20px 0;">
+      <h2 style="margin-top: 0; color: #92400e; font-size: 18px;"><%= t('mailers.migration_completed.missing_files_heading') %></h2>
+      <p><%= t('mailers.migration_completed.missing_files_help', count: missing_blobs.length) %></p>
+      <p style="margin-bottom: 0;"><a href="<%= @migration_url %>"><%= @migration_url %></a></p>
+    </div>
+    <% end %>
+
     <!-- Change Password -->
     <div style="background-color: #fef2f2; border: 2px solid #ef4444; border-radius: 6px; padding: 20px; margin: 20px 0;">
       <h2 style="margin-top: 0; color: #991b1b; font-size: 18px;"><%= t('mailers.migration_completed.change_password_heading') %></h2>
-      <p><%= t('mailers.migration_completed.change_password_help') %></p>
+      <% if missing_blobs.any? %>
+        <p style="font-weight: 600;"><%= t('mailers.migration_completed.change_password_wait') %></p>
+      <% else %>
+        <p><%= t('mailers.migration_completed.change_password_help') %></p>
+      <% end %>
       <p style="text-align: center; margin: 16px 0;">
         <a href="<%= @migration.new_pds_host %>/.well-known/change-password" style="display: inline-block; background-color: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">Change Your Password Now</a>
       </p>

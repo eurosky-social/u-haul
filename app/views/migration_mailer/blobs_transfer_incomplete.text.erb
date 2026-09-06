@@ -1,0 +1,13 @@
+<%= t('mailers.blobs_transfer_incomplete.heading') %>
+================================================================================
+
+<%= t('mailers.blobs_transfer_incomplete.intro', count: @failed_count, pds: @migration.new_pds_host) %>
+
+<%= t('mailers.blobs_transfer_incomplete.what_to_do') %>
+
+  <%= @migration_url %>
+
+<%= t('mailers.blobs_transfer_incomplete.keep_password', pds: @migration.new_pds_host) %>
+
+--------------------------------------------------------------------------------
+<%= t('mailers.blobs_transfer_incomplete.support') %> <%= @migration.token %>

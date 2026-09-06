@@ -16,7 +16,7 @@
 ----------------------------------------
 
 <%= t('mailers.migration_completed.save_password') %>
-<%= t('mailers.migration_completed.change_password') %>
+<% missing_blobs = @migration.progress_data['failed_blobs'] || [] %><%= missing_blobs.any? ? t('mailers.migration_completed.change_password_wait') : t('mailers.migration_completed.change_password') %>
 
 
 <% end %>
@@ -62,12 +62,22 @@
 
 <%= t('mailers.migration_completed.hosting_miss') %>
 
+<% missing_blobs = @migration.progress_data['failed_blobs'] || [] %>
+<% if missing_blobs.any? %>
+================================================================================
+<%= t('mailers.migration_completed.missing_files_heading') %>
+================================================================================
 
+<%= t('mailers.migration_completed.missing_files_help', count: missing_blobs.length) %>
+
+  <%= @migration_url %>
+
+<% end %>
 ================================================================================
 <%= t('mailers.migration_completed.change_password_heading') %>
 ================================================================================
 
-<%= t('mailers.migration_completed.change_password_help') %>
+<%= missing_blobs.any? ? t('mailers.migration_completed.change_password_wait') : t('mailers.migration_completed.change_password_help') %>
 
   <%= @migration.new_pds_host %>/.well-known/change-password
 

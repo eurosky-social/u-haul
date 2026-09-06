@@ -114,17 +114,34 @@ class MigrationMailer < ApplicationMailer
     end
   end
 
-  def failed_blobs_retry_complete(migration, successful_count, failed_count)
+  # FINAL mail after a completed migration: every file that was still missing
+  # at completion has now arrived. Until this mail the user must not change the
+  # new account's password - the PDS revokes the sessions the background
+  # transfer relies on when the password changes.
+  def blobs_transfer_complete(migration)
     @migration = migration
     @migration_url = migration_by_token_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))
-    @successful_count = successful_count
-    @failed_count = failed_count
-    @can_retry_again = failed_count > 0
 
     I18n.with_locale(migration.locale || :en) do
       mail(
         to: migration.email,
-        subject: I18n.t('mailers.failed_blobs_retry_complete.subject', successful_count: successful_count, failed_count: failed_count, token: migration.token)
+        subject: I18n.t('mailers.blobs_transfer_complete.subject', token: migration.token)
+      )
+    end
+  end
+
+  # Sent after a completed migration when the automatic background passes gave
+  # up on some files: the user can retry from the status page, and must keep
+  # the password unchanged until the transfer is complete.
+  def blobs_transfer_incomplete(migration, failed_count)
+    @migration = migration
+    @failed_count = failed_count
+    @migration_url = migration_by_token_url(token: migration.token, host: ENV.fetch('DOMAIN', 'localhost:3001'))
+
+    I18n.with_locale(migration.locale || :en) do
+      mail(
+        to: migration.email,
+        subject: I18n.t('mailers.blobs_transfer_incomplete.subject', count: failed_count, token: migration.token)
       )
     end
   end
