@@ -237,7 +237,7 @@
       }
     }
   </style>
-  <% if @migration.progress_data&.dig('captcha_required') && @migration.progress_data&.dig('captcha_site_key') && !@migration.email_verified? %>
+  <% if @migration.migration_out? && @migration.progress_data&.dig('captcha_required') && @migration.progress_data&.dig('captcha_site_key') && !@migration.email_verified? %>
     <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
   <% end %>
 <% end %>
@@ -277,6 +277,13 @@
             <%= plc_waiting ? t('migrations.show.progress_waiting_for_you') : "#{@migration.progress_percentage}%" %>
           </div>
         </div>
+        <% unless @migration.completed? || @migration.failed? %>
+          <div id="poll-status" class="small mt-2" style="opacity: 0.8;">
+            <span id="poll-updated"></span>
+            <span id="poll-error" style="display: none;"> · <%= t('migrations.show.poll_error') %></span>
+            · <a href="#" id="poll-refresh" style="color: inherit; text-decoration: underline;"><%= t('migrations.show.refresh_now') %></a>
+          </div>
+        <% end %>
       <% else %>
         <div class="d-flex justify-content-between align-items-center">
           <h1 class="fs-3 mb-0"><%= t('migrations.show.verify_email') %></h1>
@@ -311,7 +318,7 @@
             <%= label_tag :verification_code, t('migrations.show.verification_label') %>
             <%= text_field_tag :verification_code, nil, required: true, placeholder: t('migrations.show.verification_placeholder'), autocomplete: "off", maxlength: 7, class: "form-control font-monospace fs-3 text-center text-uppercase", style: "letter-spacing: 4px;" %>
           </div>
-          <% if @migration.progress_data&.dig('captcha_required') && @migration.progress_data&.dig('captcha_site_key') %>
+          <% if @migration.migration_out? && @migration.progress_data&.dig('captcha_required') && @migration.progress_data&.dig('captcha_site_key') %>
             <div class="d-flex justify-content-center mt-3">
               <div class="h-captcha" data-sitekey="<%= @migration.progress_data['captcha_site_key'] %>"></div>
             </div>
@@ -357,6 +364,23 @@
         <% elsif @migration.progress_data&.dig('legacy_blobs_converted') == true %>
           <div class="alert alert-success border-start border-success border-4 rounded-1 py-2 px-3 mb-3 small">
             ✅ <%= t('migrations.show.blobs_converted') %>
+          </div>
+        <% end %>
+
+        <%# Files the blob stage could not transfer. The migration goes on without them; %>
+        <%# they are retried in the background and can be retried here at any time,     %>
+        <%# also after completion. The list is only written when the blob stage ends,    %>
+        <%# so this must render for every later status, not just pending_blobs.          %>
+        <% missing_blobs = @migration.progress_data&.dig('failed_blobs') || [] %>
+        <% if missing_blobs.any? && !@migration.pending_blobs? && !@migration.failed? %>
+          <div id="missing-files-notice" class="alert alert-warning border-start border-warning border-4 rounded-1 py-2 px-3 mb-3 small">
+            <div class="fw-semibold mb-1" style="color: #92400e;"><%= t('migrations.show.missing_files_title', count: missing_blobs.length) %></div>
+            <p class="mb-2" style="color: #78350f;">
+              <%= @migration.completed? ? t('migrations.show.missing_files_completed') : t('migrations.show.missing_files_detail') %>
+            </p>
+            <%= form_with url: retry_failed_blobs_by_token_path(@migration.token), method: :post, local: true do %>
+              <button type="submit" class="btn btn-sm btn-warning text-white fw-semibold"><%= t('migrations.show.retry_failed_blobs') %></button>
+            <% end %>
           </div>
         <% end %>
 
@@ -756,11 +780,35 @@
       var emailVerified = <%= @migration.email_verified? %>;
       var statusWaitingText = '<%= j t('migrations.show.status_waiting_for_you') %>';
       var barWaitingText = '<%= j t('migrations.show.progress_waiting_for_you') %>';
+      var lastUpdatedText = '<%= j t('migrations.show.last_updated', time: '{time}') %>';
+
+      // "Last updated" line + error marker, so a stalled poll is visible instead of silent
+      function markPolled(ok) {
+        var updated = document.getElementById('poll-updated');
+        var error = document.getElementById('poll-error');
+        if (ok && updated) {
+          updated.textContent = lastUpdatedText.replace('{time}', new Date().toLocaleTimeString());
+        }
+        if (error) error.style.display = ok ? 'none' : '';
+      }
+
+      var refreshLink = document.getElementById('poll-refresh');
+      if (refreshLink) {
+        refreshLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          window.location.reload();
+        });
+      }
 
       function poll() {
-        fetch(pollUrl, { headers: { 'Accept': 'application/json' } })
-          .then(function(r) { return r.json(); })
+        fetch(pollUrl, { headers: { 'Accept': 'application/json' }, cache: 'no-store' })
+          .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
           .then(function(data) {
+            markPolled(true);
+
             // Major state transitions that change the page layout — full reload
             if (!emailVerified && data.email_verified) {
               window.location.reload();
@@ -770,12 +818,12 @@
               window.location.reload();
               return;
             }
-            // Status changed to or from pending_plc/pending_blobs (UI layout changes) — full reload
-            if (['pending_plc', 'pending_blobs'].includes(data.status) && !['pending_plc', 'pending_blobs'].includes(currentStatus)) {
-              window.location.reload();
-              return;
-            }
-            if (['pending_plc', 'pending_blobs'].includes(currentStatus) && !['pending_plc', 'pending_blobs'].includes(data.status)) {
+            // Every status has its own layout (the PLC token form only exists in
+            // the pending_plc render, the blob metrics only in pending_blobs, ...),
+            // so any status change needs a full reload. Updating in place across
+            // statuses left the header saying "Waiting for your input" above a
+            // body that still described the blob transfer.
+            if (data.status !== currentStatus) {
               window.location.reload();
               return;
             }
@@ -799,13 +847,6 @@
             var statusText = document.getElementById('status-text');
             if (statusText) {
               statusText.textContent = isPendingPlc ? statusWaitingText : data.status_humanized;
-            }
-
-            var statusValue = document.getElementById('status-value');
-            if (statusValue && data.status !== currentStatus) {
-              statusValue.className = 'fs-5 fw-semibold status-in-progress';
-              statusValue.setAttribute('data-status', data.status);
-              currentStatus = data.status;
             }
 
             var retryInfo = document.getElementById('retry-info');
@@ -847,10 +888,12 @@
             }
           })
           .catch(function() {
-            // Silently ignore fetch errors, will retry on next poll
+            // Keep polling, but show that the page is not up to date
+            markPolled(false);
           });
       }
 
+      markPolled(true);
       setInterval(poll, 10000);
     })();
   </script>
