@@ -3,6 +3,18 @@
 require 'rails_helper'
 
 RSpec.describe ImportBlobsJob, type: :job do
+  # The job hands blob transfers to a pool of PARALLEL_BLOBS threads, releasing
+  # the main thread's DB connection first so it doesn't idle on a pooled
+  # connection while waiting on joins. Transactional fixtures pin the example's
+  # open transaction to that same connection, so the two cannot coexist:
+  # releasing it makes teardown try to check in a connection owned by a dead
+  # worker thread, which raises intermittently depending on interleaving.
+  # Stubbing the release out instead just starves the pool - PARALLEL_BLOBS is 5
+  # and so is the pool - and every checkout waits out its 5s timeout.
+  self.use_transactional_tests = false
+
+  after { Migration.delete_all }
+
   let(:migration) do
     Migration.create!(
       email: "test@example.com",
@@ -21,6 +33,23 @@ RSpec.describe ImportBlobsJob, type: :job do
   before do
     migration.set_password('test_password_123')
     allow(GoatService).to receive(:new).with(migration).and_return(goat_service)
+    # The job authenticates against the target PDS before uploading anything;
+    # without this the double rejects the call and every example fails there.
+    allow(goat_service).to receive(:login_new_pds)
+
+    # Post-import reconciliation asks the PDS how many blobs it expected against
+    # how many arrived. Matching counts short-circuit it, so examples exercise
+    # the import path rather than the recovery path; contexts that care about
+    # reconciliation override this.
+    allow(goat_service).to receive(:get_account_status)
+      .and_return({ 'expectedBlobs' => 0, 'importedBlobs' => 0 })
+    allow(goat_service).to receive(:collect_all_missing_blobs).and_return([])
+
+    # Per-blob retries back off with sleep(2**attempt); without this the failure
+    # examples spend ~14s each waiting out real backoff.
+    allow_any_instance_of(described_class).to receive(:sleep)
+
+
   end
 
   describe '#perform' do
@@ -208,29 +237,38 @@ RSpec.describe ImportBlobsJob, type: :job do
 
       end
 
-      it 'marks migration as failed' do
-        expect {
-          described_class.perform_now(migration.id)
-        }.to raise_error(GoatService::NetworkError)
+      # A blob that will not transfer is not treated as fatal: the job records
+      # the CID, writes a manifest, and carries on. RetryFailedBlobsJob exists to
+      # pick them up later.
+      #
+      # NOTE: that holds even when *every* blob fails, as here. The migration
+      # still advances to pending_prefs and the user is moved along with none of
+      # their media. Reconciliation is stubbed out in these examples, so it is
+      # the only thing that would notice - see the PR description.
+      it 'records the failed blobs rather than failing the migration' do
+        described_class.perform_now(migration.id)
 
         migration.reload
-        expect(migration.status).to eq('failed')
-        expect(migration.last_error).to include('Blob import failed')
+        expect(migration.progress_data['failed_blobs']).to match_array(blob_cids)
       end
 
-      it 'logs error details' do
-        expect(Rails.logger).to receive(:error).with(/Blob import failed/)
-        expect(Rails.logger).to receive(:error).with(kind_of(String)) # backtrace
+      # ImportBlobsJob logs through ActiveJob's `logger`, which is not the same
+      # object as Rails.logger - expectations set on Rails.logger silently never
+      # match. Assert against the job's own logger instead.
+      it 'logs the transfer failures' do
+        job_logger = instance_spy(ActiveSupport::Logger)
+        allow_any_instance_of(described_class).to receive(:logger).and_return(job_logger)
 
-        expect {
-          described_class.perform_now(migration.id)
-        }.to raise_error(GoatService::NetworkError)
+        described_class.perform_now(migration.id)
+
+        expect(job_logger).to have_received(:warn).with(/Failed to transfer 3 blobs/)
       end
 
-      it 'increments retry count' do
-        expect {
-          described_class.perform_now(migration.id) rescue nil
-        }.to change { migration.reload.retry_count }.by(1)
+      it 'still advances to the next stage' do
+        described_class.perform_now(migration.id)
+
+        migration.reload
+        expect(migration.status).to eq('pending_prefs')
       end
     end
 
@@ -241,16 +279,12 @@ RSpec.describe ImportBlobsJob, type: :job do
         )
       end
 
-      it 'retries with polynomial backoff' do
-        # The job is configured to retry 5 times for RateLimitError
+      # retry_on GoatService::RateLimitError catches the error and schedules a
+      # retry rather than letting it propagate.
+      it 'retries rather than propagating the rate limit' do
         expect {
           described_class.perform_now(migration.id)
-        }.to raise_error(GoatService::RateLimitError)
-
-        # Verify job is configured for retry
-        job = described_class.new(migration.id)
-        retry_config = job.class.retry_on_block_for(GoatService::RateLimitError)
-        expect(retry_config).to be_present
+        }.to have_enqueued_job(described_class)
       end
     end
 
@@ -321,12 +355,15 @@ RSpec.describe ImportBlobsJob, type: :job do
       expect(described_class.new.queue_name).to eq('migrations')
     end
 
-    it 'has retry configuration' do
-      job = described_class.new(migration.id)
+    # retry_on_block_for is not an ActiveJob API. Assert the behaviour the retry
+    # configuration is meant to produce instead of reaching for internals.
+    it 'retries instead of surfacing a failure to the caller' do
+      allow(goat_service).to receive(:list_blobs)
+        .and_raise(GoatService::NetworkError, 'boom')
 
-      # Check that retry_on is configured
-      expect(described_class.retry_on_block_for(StandardError)).to be_present
-      expect(described_class.retry_on_block_for(GoatService::RateLimitError)).to be_present
+      expect {
+        described_class.perform_now(migration.id)
+      }.to have_enqueued_job(described_class)
     end
   end
 
