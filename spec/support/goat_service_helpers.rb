@@ -31,6 +31,43 @@ module GoatServiceHelpers
       )
   end
 
+  # GoatService authenticates over HTTP (minisky) rather than the goat CLI: the
+  # old PDS from stored tokens, the new PDS from a password login. Stub both
+  # session endpoints so examples exercise the method under test instead of
+  # dying on an unstubbed login.
+  def stub_pds_sessions(migration)
+    [migration.old_pds_host, migration.new_pds_host].each do |host|
+      %w[createSession refreshSession getSession].each do |endpoint|
+        url = "#{host}/xrpc/com.atproto.server.#{endpoint}"
+        body = pds_session_body(migration).to_json
+        headers = { 'Content-Type' => 'application/json' }
+
+        stub_request(:post, url).to_return(status: 200, body: body, headers: headers)
+        stub_request(:get, url).to_return(status: 200, body: body, headers: headers)
+      end
+    end
+  end
+
+  def pds_session_body(migration)
+    {
+      accessJwt: fake_jwt,
+      refreshJwt: fake_jwt(expires_at: 30.days.from_now),
+      handle: migration.old_handle,
+      did: migration.did,
+      active: true
+    }
+  end
+
+  # minisky parses the access token to decide whether to refresh: it wants three
+  # dot-separated parts whose middle part base64-decodes to JSON with a numeric
+  # exp, and raises "Invalid access token format" otherwise. Base64.decode64 is
+  # what it uses, so encode with the standard alphabet rather than urlsafe.
+  def fake_jwt(expires_at: 1.hour.from_now)
+    header = Base64.strict_encode64({ alg: 'none', typ: 'JWT' }.to_json)
+    payload = Base64.strict_encode64({ exp: expires_at.to_i }.to_json)
+    "#{header}.#{payload}.signature"
+  end
+
   # Create a test migration record
   def create_test_migration(attributes = {})
     default_attributes = {
