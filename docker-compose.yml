@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   eurosky-postgres:
     image: postgres:15-alpine
