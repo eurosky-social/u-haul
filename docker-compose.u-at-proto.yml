@@ -1,0 +1,25 @@
+# Optional override: attach the development stack to the Docker network of a
+# local u-at-proto checkout so the app can reach its PDS instances by
+# container name.
+#
+# Requires the u-at-proto stack to be running (the network must exist):
+#   docker compose -f docker-compose.yml -f docker-compose.u-at-proto.yml up -d
+#
+# Without this file docker-compose.yml is self-contained (issue #13).
+services:
+  eurosky-migrate:
+    networks:
+      - u-at-proto_default
+  eurosky-web:
+    networks:
+      - u-at-proto_default
+  eurosky-sidekiq:
+    networks:
+      - u-at-proto_default
+  eurosky-sidekiq-critical:
+    networks:
+      - u-at-proto_default
+
+networks:
+  u-at-proto_default:
+    external: true
