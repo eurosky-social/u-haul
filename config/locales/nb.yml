@@ -162,6 +162,7 @@ nb:
       confirm_email_access: "Vennligst bekreft at du har tilgang til denne e-postadressen."
       # Step 3
       select_server: "Vennligst velg en server eller skriv inn en egendefinert server-URL"
+      captcha_unsupported: "Denne serveren krever telefon- eller captcha-verifisering for nye kontoer, og det kan ikke fullføres herfra. Opprett kontoen på den serveren først, kom så tilbake og velg den på nytt — veiviseren gjenkjenner den eksisterende kontoen."
       checking_server: "Sjekker server..."
       checking_requirements: "Sjekker serverkrav..."
       server_verified: "Server verifisert!"
@@ -233,6 +234,10 @@ nb:
       files: "filer"
       data_transferred: "Data overført"
       failed: "Mislykket"
+      retry_failed_blobs: "Prøv mislykkede filer på nytt"
+      missing_files_title: "Filer som ennå ikke er overført: %{count}"
+      missing_files_detail: "De prøves automatisk på nytt i bakgrunnen, også etter at migreringen er ferdig, og du kan prøve på nytt nå. Du kan fortsette migreringen; berørte bilder eller videoer ser ødelagte ut til filene har kommet frem."
+      missing_files_completed: "Migreringen din er ferdig, men disse filene overføres fortsatt i bakgrunnen. Berørte bilder eller videoer ser ødelagte ut til de har kommet frem. Du kan også prøve på nytt nå. IKKE endre passordet til den nye kontoen din før du har mottatt vår siste e-post som bekrefter at alle filene har kommet frem — endrer du det tidligere, avbrytes overføringen."
       preparing_blobs: "Forbereder overføring av <strong>%{count}</strong> blober..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ nb:
       # PLC pending — header status
       status_waiting_for_you: "Venter på din respons"
       progress_waiting_for_you: "Handling kreves — se nedenfor ↓"
+      last_updated: "Sist oppdatert %{time}"
+      poll_error: "kunne ikke oppdatere — sjekk tilkoblingen din"
+      refresh_now: "Oppdater nå"
 
       # PLC pending — action required banner
       action_required_title: "Handling kreves — Sjekk e-posten din!"
@@ -344,6 +352,10 @@ nb:
       password_for: "Passord for %{handle}"
       enter_password_placeholder: "Skriv inn kontopassordet ditt"
       reauth_button: "Autentiser på nytt og fortsett migrering"
+      new_pds_reauth_safe: "Migreringsdataene dine er trygge — innloggingen til den nye kontoen trenger bare det gjeldende passordet."
+      new_pds_reauth_help: "Passordet til den nye kontoen din på <strong>%{pds}</strong> ble avvist. Dette skjer hvis du tilbakestilte passordet der mens migreringen ventet. Skriv inn det gjeldende passordet til den nye kontoen for å fortsette."
+      new_pds_password_for: "Gjeldende passord for kontoen din på %{pds}"
+      new_pds_reauth_button: "Lagre passord og fortsett migreringen"
       plc_safe: "Migreringsdataene dine er trygge — du trenger bare et nytt PLC-token."
       plc_request_help: "Klikk knappen nedenfor for å be om et nytt PLC-token. Du mottar det via e-post fra <strong>%{pds}</strong>."
       request_plc_confirm: "Be om et nytt PLC-token fra din gamle PDS?"
@@ -460,6 +472,11 @@ nb:
       tokens_missing: "Autentiseringstokens mangler. Vennligst gå tilbake og autentiser på nytt."
       account_not_found: "Ingen konto funnet på %{pds} med din DID (%{did}). Vennligst gå tilbake og velg en annen mål-PDS, eller start en ny migrering."
       account_verify_failed: "Kunne ikke verifisere kontoeksistens på %{pds}: %{error}. Vennligst prøv igjen."
+      invalid_target_host: "\"%{host}\" er ikke en gyldig serveradresse. Gå tilbake til trinn 3 og velg eller skriv inn målserveren (for eksempel pds.example.com)."
+      target_host_is_handle: "\"%{host}\" er brukernavnet (handle) ditt, ikke en serveradresse. Gå tilbake til trinn 3 og velg målserveren på nytt."
+      captcha_unsupported: "%{pds} krever telefon- eller captcha-verifisering for nye kontoer, noe dette verktøyet ikke kan fullføre. Opprett kontoen på den serveren først, start så en ny migrering og velg den på nytt."
+      new_pds_reauth_failed: "Kunne ikke logge inn på kontoen din på %{pds}: %{error}. Sjekk passordet."
+      new_pds_reauth_success: "Passordet for kontoen din på %{pds} er lagret. Du kan nå sende inn PLC-bekreftelseskoden din eller be om en ny."
       target_tokens_missing: "Autentiseringstokens for mål-PDS mangler. Vennligst gå tilbake og verifiser legitimasjonen din på %{pds}."
       reauth_not_available: "Ny autentisering er ikke tilgjengelig på dette steget."
       reauth_failed: "Autentisering mislyktes: %{error}. Vennligst sjekk passordet ditt."
@@ -548,6 +565,9 @@ nb:
       hosting_miss: "Mange brukere overser dette steget — uten riktig hostingleverandør vil du ikke kunne logge inn."
       change_password_heading: "ENDRE PASSORDET DITT"
       change_password_help: "For din sikkerhet anbefaler vi sterkt å endre passordet ditt umiddelbart:"
+      missing_files_heading: "NOEN FILER OVERFØRES FORTSATT"
+      missing_files_help: "Antall filer (bilder eller videoer) som ennå ikke er overført: %{count}. De prøves automatisk på nytt i bakgrunnen; berørte innlegg viser ødelagte bilder til de har kommet frem. VIKTIG: ikke endre passordet til den nye kontoen din før du har mottatt vår siste e-post som bekrefter at alle filene har kommet frem. Endrer du det tidligere, avbrytes overføringen. Du kan følge fremdriften og prøve på nytt på statussiden:"
+      change_password_wait: "IKKE endre dette passordet ennå: noen av filene dine overføres fortsatt i bakgrunnen, og en passordendring ville avbryte overføringen. Vent på vår siste e-post som bekrefter at alle filene har kommet frem, og endre det deretter."
       change_password_later: "Du kan også endre det senere i kontoinnstillingene dine."
       whats_next: "HVA SKJER VIDERE?"
       next1: "Kontoen din er nå aktiv på %{pds}"
@@ -559,6 +579,23 @@ nb:
       privacy2: "All kryptert legitimasjon er sikkert slettet fra serverne våre"
       support: "Hvis du har spørsmål eller problemer, kontakt support med migreringtokenet ditt:"
       email_footer: "Denne e-posten ble sendt til %{email} fordi du startet en kontomigrering."
+
+    blobs_transfer_complete:
+      subject: "Alle filer overført — migreringen din er helt fullført (%{token})"
+      heading: "ALLE FILENE HAR KOMMET FREM"
+      intro: "Filene som fortsatt ble overført da migreringen din ble ferdig, har nå alle kommet frem til %{pds}. Innleggene, bildene og videoene dine er komplette."
+      can_change_password: "Du kan nå trygt endre passordet til kontoen din på %{pds}."
+      status_page: "Statusside for migreringen (tilgjengelig til migreringsposten slettes):"
+      support: "Hvis du trenger hjelp, kontakt support og oppgi migreringstokenet ditt:"
+
+    blobs_transfer_incomplete:
+      subject: "Filer som ikke kunne overføres: %{count} (%{token})"
+      heading: "NOEN FILER KUNNE IKKE OVERFØRES"
+      intro: "Antall filer (bilder eller videoer) som ikke kunne overføres til %{pds} til tross for flere automatiske forsøk: %{count}. Berørte innlegg viser ødelagte bilder."
+      what_to_do: "Åpne statussiden og bruk «Prøv mislykkede filer på nytt». Hvert forsøk bruker kopiene fra sikkerhetskopien din, så ingenting går tapt. Du får en siste e-post når alt har kommet frem:"
+      keep_password: "Inntil da må du IKKE endre passordet til kontoen din på %{pds} — en endring avbryter overføringen for godt."
+      support: "Hvis forsøkene fortsetter å mislykkes, kontakt support og oppgi migreringstokenet ditt:"
+
 
     migration_failed:
       subject: "Migrering mislyktes - handling påkrevd (%{token})"
@@ -604,6 +641,7 @@ nb:
       key_warning: "Lagre denne nøkkelen i en passordbehandler eller et annet sikkert sted. Du vil IKKE kunne hente den senere."
       next_step: "Gå til migreringssiden for å skrive inn PLC-bekreftelseskoden:"
       check_email: "Sjekk e-posten din for en kode fra din gamle PDS-leverandør — den ser ut som XXXXX-XXXXX"
+      no_password_reset: "Viktig: ikke logg inn på den nye kontoen din på %{pds}, og ikke tilbakestill passordet der, før denne migreringen er ferdig. Tilbakestilling av passordet ugyldiggjør innloggingsdataene migreringen bruker, og migreringen mislykkes."
 
     plc_token_failed:
       subject: "Handling påkrevd: Be om ny PLC-bekreftelseskode (%{token})"

@@ -25,6 +25,8 @@ RSpec.describe UploadBlobsJob, type: :job do
   before do
     allow(GoatService).to receive(:new).with(migration).and_return(goat_service)
     allow(goat_service).to receive(:login_new_pds)
+    # Skip retry backoffs and the second-pass breather
+    allow_any_instance_of(described_class).to receive(:pause)
 
     # Create local blob files
     FileUtils.mkdir_p(blobs_dir)
@@ -50,6 +52,15 @@ RSpec.describe UploadBlobsJob, type: :job do
 
         migration.reload
         expect(migration.status).to eq('pending_prefs')
+      end
+
+      it 'records progress under the keys the status page reads' do
+        described_class.perform_now(migration.id)
+
+        progress = migration.reload.progress_data
+        expect(progress['blobs_completed']).to eq(3)
+        expect(progress['blobs_total']).to eq(3)
+        expect(progress['bytes_transferred']).to be > 0
       end
 
       it 'logs in to new PDS' do
@@ -150,6 +161,34 @@ RSpec.describe UploadBlobsJob, type: :job do
         migration.reload
         expect(migration.progress_data['failed_uploads']).to be_present
         expect(migration.progress_data['failed_uploads'].length).to eq(blob_cids.length)
+      end
+
+      it 'exposes the failures under the key the status page and retry use' do
+        described_class.perform_now(migration.id)
+
+        expect(migration.reload.progress_data['failed_blobs']).to match_array(blob_cids)
+      end
+
+      it 'schedules an automatic retry of the leftovers' do
+        described_class.perform_now(migration.id)
+
+        expect(RetryFailedBlobsJob).to have_been_enqueued.with(migration.id, match_array(blob_cids), 1)
+      end
+
+      it 'retries the leftovers sequentially after the parallel pass' do
+        calls = Hash.new(0)
+        allow(goat_service).to receive(:upload_blob) do |path|
+          calls[path] += 1
+          # fail the parallel pass (5 attempts) and the first sequential attempt, then succeed
+          raise GoatService::NetworkError, 'Upload failed' if calls[path] <= 6
+        end
+
+        described_class.perform_now(migration.id)
+
+        progress = migration.reload.progress_data
+        expect(progress['failed_blobs']).to be_blank
+        expect(progress['blobs_completed']).to eq(blob_cids.length)
+        expect(migration.status).to eq('pending_prefs')
       end
     end
 

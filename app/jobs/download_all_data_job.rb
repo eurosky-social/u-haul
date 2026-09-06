@@ -99,6 +99,10 @@ class DownloadAllDataJob < ApplicationJob
     # Step 6: Advance to next stage
     migration.advance_to_pending_backup!
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    logger.warn(e.message)
+
   rescue StandardError => e
     logger.error("Download failed for migration #{migration_id}: #{e.message}")
     logger.error(e.backtrace.join("\n"))
@@ -176,6 +180,7 @@ class DownloadAllDataJob < ApplicationJob
     # Thread-safe counters and queue
     mutex = Mutex.new
     queue = Queue.new
+    aborted = false # set when the migration is cancelled/failed while downloading
 
     # Add all blob CIDs to the queue
     blobs.each_with_index { |cid, index| queue << [cid, index] }
@@ -189,6 +194,8 @@ class DownloadAllDataJob < ApplicationJob
     threads = PARALLEL_BLOBS.times.map do
       Thread.new do
         loop do
+          break if aborted
+
           # Get next blob from queue (blocks if empty, returns nil when queue is closed)
           begin
             cid, index = queue.pop(true)
@@ -220,6 +227,7 @@ class DownloadAllDataJob < ApplicationJob
               mutex.synchronize do
                 ActiveRecord::Base.connection_pool.with_connection do
                   update_download_progress(migration, downloaded_count, total_blobs, total_bytes)
+                  aborted = true if migration.terminal_in_db?
                 end
               end
             end
@@ -239,6 +247,8 @@ class DownloadAllDataJob < ApplicationJob
 
     # Final progress update (back on main Sidekiq thread, connection already available)
     update_download_progress(migration, downloaded_count, total_blobs, total_bytes)
+
+    raise Migration::Aborted, "Migration #{migration.token} was cancelled or failed during blob download; stopping" if aborted
 
     # Log summary
     logger.info("Download complete: #{downloaded_count}/#{total_blobs} successful")
@@ -329,14 +339,16 @@ class DownloadAllDataJob < ApplicationJob
 
   # Update download progress in database
   def update_download_progress(migration, downloaded, total, bytes_downloaded)
-    migration.progress_data ||= {}
-    migration.progress_data['download_progress'] = {
-      'total' => total,
-      'downloaded' => downloaded,
-      'bytes' => bytes_downloaded,
-      'last_update' => Time.current.iso8601
-    }
-    migration.save!
+    # Atomic JSONB merge: never writes back a stale copy of progress_data
+    # (which would drop keys such as cancelled_at written by the controller).
+    migration.merge_progress!(
+      'download_progress' => {
+        'total' => total,
+        'downloaded' => downloaded,
+        'bytes' => bytes_downloaded,
+        'last_update' => Time.current.iso8601
+      }
+    )
 
     logger.debug("Download progress: #{downloaded}/#{total} blobs (#{format_bytes(bytes_downloaded)})")
   end

@@ -83,6 +83,33 @@
         </div>
       <% end %>
 
+      <%# New-account password form - the generated password for the NEW account was rejected (migration_out) %>
+      <% if error_context[:show_new_pds_reauth_form] %>
+        <div class="bg-info-subtle border border-2 border-primary rounded-3 p-4 mb-3">
+          <h4 class="text-primary fw-bold mb-2" style="font-size: 16px;">
+            <%= t('migrations.error_details.new_pds_reauth_safe') %>
+          </h4>
+          <p class="text-primary small mb-3">
+            <%= t('migrations.error_details.new_pds_reauth_help', pds: @migration.new_pds_host).html_safe %>
+          </p>
+          <form action="<%= reauthenticate_new_pds_by_token_path(@migration.token) %>" method="post">
+            <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+            <div class="mb-3">
+              <label for="new_pds_password" class="form-label small text-primary fw-semibold mb-1">
+                <%= t('migrations.error_details.new_pds_password_for', pds: @migration.new_pds_host) %>
+              </label>
+              <input type="password" name="password" id="new_pds_password" required
+                     autocomplete="current-password"
+                     placeholder="<%= t('migrations.error_details.enter_password_placeholder') %>"
+                     class="form-control">
+            </div>
+            <button type="submit" class="btn btn-lg btn-gradient">
+              <%= t('migrations.error_details.new_pds_reauth_button') %>
+            </button>
+          </form>
+        </div>
+      <% end %>
+
       <%# PLC Token Action - shown when a new PLC token is needed %>
       <% if error_context[:show_request_new_plc_token] %>
         <div class="bg-info-subtle border border-2 border-primary rounded-3 p-4 mb-3">

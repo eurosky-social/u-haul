@@ -88,6 +88,10 @@ class CreateBackupBundleJob < ApplicationJob
     # Step 7: Advance to next stage
     migration.advance_to_backup_ready!
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    logger.warn(e.message)
+
   rescue StandardError => e
     logger.error("Backup bundle creation failed for migration #{migration&.id || migration_id}: #{e.message}")
     logger.error(e.backtrace.join("\n"))

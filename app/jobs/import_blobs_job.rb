@@ -93,6 +93,10 @@ class ImportBlobsJob < ApplicationJob
     # Step 8: Advance to next stage
     migration.advance_to_pending_prefs!
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    logger.warn(e.message)
+
   rescue StandardError => e
     logger.error("Blob import failed for migration #{migration&.id || migration_id}: #{e.message}")
     logger.error(e.backtrace.join("\n"))
@@ -154,6 +158,7 @@ class ImportBlobsJob < ApplicationJob
     # Thread-safe counters and queue
     mutex = Mutex.new
     queue = Queue.new
+    aborted = false # set when the migration is cancelled/failed while transferring
 
     # Add all blobs to the queue
     blobs.each_with_index { |cid, index| queue << [cid, index] }
@@ -167,6 +172,8 @@ class ImportBlobsJob < ApplicationJob
     threads = PARALLEL_BLOBS.times.map do
       Thread.new do
         loop do
+          break if aborted
+
           # Get next blob from queue (non-blocking)
           begin
             cid, index = queue.pop(true)
@@ -204,6 +211,7 @@ class ImportBlobsJob < ApplicationJob
               mutex.synchronize do
                 ActiveRecord::Base.connection_pool.with_connection do
                   update_blob_progress(migration, successful_count, blobs.length, total_bytes_transferred)
+                  aborted = true if migration.terminal_in_db?
                 end
               end
             end
@@ -223,6 +231,8 @@ class ImportBlobsJob < ApplicationJob
 
     # Final progress update
     update_blob_progress(migration, successful_count, blobs.length, total_bytes_transferred)
+
+    raise Migration::Aborted, "Migration #{migration.token} was cancelled or failed during blob transfer; stopping" if aborted
 
     # Log summary
     logger.info("Blob transfer complete: #{successful_count}/#{blobs.length} successful")
@@ -313,12 +323,14 @@ class ImportBlobsJob < ApplicationJob
 
   # Update progress tracking in database
   def update_blob_progress(migration, completed, total, bytes_transferred)
-    migration.progress_data ||= {}
-    migration.progress_data['blobs_completed'] = completed
-    migration.progress_data['blobs_total'] = total
-    migration.progress_data['bytes_transferred'] = bytes_transferred
-    migration.progress_data['last_progress_update'] = Time.current.iso8601
-    migration.save!
+    # Atomic JSONB merge: never writes back a stale copy of progress_data
+    # (which would drop keys such as cancelled_at written by the controller).
+    migration.merge_progress!(
+      'blobs_completed' => completed,
+      'blobs_total' => total,
+      'bytes_transferred' => bytes_transferred,
+      'last_progress_update' => Time.current.iso8601
+    )
 
     logger.debug("Progress: #{completed}/#{total} blobs (#{format_bytes(bytes_transferred)})")
   end

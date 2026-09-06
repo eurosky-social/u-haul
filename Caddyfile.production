@@ -237,3 +237,17 @@
 www.{$DOMAIN} {
   redir https://{$DOMAIN}{uri} permanent
 }
+
+# Container health check target (see compose.yml.production / Dockerfile.caddy).
+# Plain HTTP on the loopback host name: the check must neither follow the
+# HTTPS redirect of the main site (no certificate for "localhost") nor rely on
+# the admin API, which is disabled above. Without this the container reported
+# "unhealthy" permanently, which would mask a real outage.
+http://localhost {
+  handle /health {
+    respond "OK" 200
+  }
+  handle {
+    respond 404
+  }
+}

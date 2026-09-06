@@ -27,6 +27,8 @@ class StuckMigrationSweeperJob < ApplicationJob
 
   # Statuses that should have an active job processing them.
   # Excludes pending_plc (waiting for user action) and terminal states.
+  # pending_account is only "active" once the email has been verified; see
+  # find_stuck_migrations.
   ACTIVE_STATUSES = %w[
     pending_download
     pending_backup
@@ -70,7 +72,14 @@ class StuckMigrationSweeperJob < ApplicationJob
   private
 
   def find_stuck_migrations
+    # A migration whose email is not verified has never been started: it sits
+    # in pending_account until Migration#verify_email! schedules the first job.
+    # It is waiting for the user, not stuck, and must never be kicked off from
+    # here. Doing so created the target account and requested the PLC token
+    # before the user confirmed the address, and the restart on verification
+    # then failed the migration as an "orphaned account".
     Migration.where(status: ACTIVE_STATUSES)
+             .where.not(email_verified_at: nil)
              .where("updated_at < ?", STUCK_THRESHOLD.ago)
   end
 

@@ -135,6 +135,18 @@ class ActivateAccountJob < ApplicationJob
     # Give user 2 days to view status page, download backup, copy rotation key
     # User can also manually delete via the "Delete my data" button on the status page
     Rails.logger.info("Scheduling migration record deletion in 2 days (GDPR compliance)")
+    # Files the blob stage could not transfer: the completion email told the
+    # user to wait for a FINAL mail before changing the password. Make sure a
+    # background pass runs after completion so that mail (or the "incomplete"
+    # one) is actually sent - unless a chain from the blob stage is still
+    # pending, which will notice the completed status itself.
+    missing_blobs = migration.progress_data['failed_blobs'] || []
+    if missing_blobs.any? && (migration.progress_data['blobs_auto_retry_exhausted_at'].present? || migration.progress_data['blobs_auto_retry_scheduled_at'].blank?)
+      RetryFailedBlobsJob.set(wait: 15.minutes).perform_later(migration.id, missing_blobs, 1)
+      migration.merge_progress!('blobs_auto_retry_scheduled_at' => Time.current.iso8601, 'blobs_auto_retry_exhausted_at' => nil)
+      Rails.logger.info("Scheduled background retry for #{missing_blobs.length} missing blobs after completion of #{migration.token}")
+    end
+
     DeleteMigrationJob.set(wait: 2.days).perform_later(migration.id)
 
     Rails.logger.info("=" * 80)
@@ -150,6 +162,10 @@ class ActivateAccountJob < ApplicationJob
     Rails.logger.info("Completion email sent to: #{migration.email}")
     Rails.logger.info("Migration record will be auto-deleted in 2 days (or earlier via user action)")
     Rails.logger.info("=" * 80)
+
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    Rails.logger.warn(e.message)
 
   rescue GoatService::RateLimitError => e
     Rails.logger.warn("Rate limit hit for migration #{migration.token}: #{e.message}")

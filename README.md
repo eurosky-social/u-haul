@@ -76,8 +76,8 @@ u-haul provides a web interface for ATProto account migrations, communicating di
 
 3. **Generate encryption keys:**
    ```bash
-   # Master key for Lockbox encryption
-   openssl rand -hex 16
+   # Master key for Lockbox encryption (32 bytes = 64 hex characters)
+   openssl rand -hex 32
 
    # Active Record encryption keys (run 3 times)
    openssl rand -hex 32
@@ -87,7 +87,7 @@ u-haul provides a web interface for ATProto account migrations, communicating di
 
    Add these to your `.env` file:
    ```bash
-   MIGRATION_MASTER_KEY=<your-hex-16-key>
+   MIGRATION_MASTER_KEY=<your-hex-32-key>
    ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=<your-hex-32-key-1>
    ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY=<your-hex-32-key-2>
    ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=<your-hex-32-key-3>
@@ -98,8 +98,15 @@ u-haul provides a web interface for ATProto account migrations, communicating di
    docker compose up -d
    ```
 
+   `docker-compose.yml` is self-contained. If you also run a local
+   [u-at-proto](https://github.com/eurosky-social/u-at-proto) stack and want the
+   app to reach its PDS containers, add the override file:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.u-at-proto.yml up -d
+   ```
+
 5. **Access the web interface:**
-   - Open http://localhost:3000
+   - Open http://localhost:3001 (port 3001 on the host, 3000 inside the container)
    - Fill out the migration form
    - Monitor your migration progress
 
@@ -125,7 +132,7 @@ SECRET_KEY_BASE=generate-with-rails-secret
 RAILS_ENV=production
 
 # Encryption (CRITICAL - generate unique keys)
-MIGRATION_MASTER_KEY=your-hex-16-key
+MIGRATION_MASTER_KEY=your-hex-32-key
 ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY=your-hex-32-key
 ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY=your-hex-32-key
 ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT=your-hex-32-key
@@ -436,6 +443,14 @@ cd scripts
 ```
 
 See [`scripts/README.md`](scripts/README.md) for detailed cleanup instructions.
+
+Since September 2026 eu-haul recognises a deactivated account that the **same** migration created on an earlier run and simply continues, so this cleanup is only needed for accounts left behind by a different, older migration.
+
+#### "A request body was provided when none was expected" at the PLC token step
+
+The old PDS rejected the PLC token request (`com.atproto.identity.requestPlcOperationSignature`) because the request arrived with body framing. This happens when the old PDS sits behind a proxy that re-frames bodyless POSTs as `Transfer-Encoding: chunked` — most commonly a Cloudflare Tunnel (see [bluesky-social/atproto#3267](https://github.com/bluesky-social/atproto/issues/3267)). eu-haul sends these calls without a body and retries the transient rejection a few times, but a tunnel can still produce it.
+
+**Solution** (operator of the old PDS): disable chunked encoding on the tunnel origin — `noChunkedEncoding: true` in the origin request settings of `cloudflared`, or "Disable chunked encoding" in the Zero Trust dashboard — then request a new PLC token from the migration page.
 
 #### Migration stuck at "pending_blobs"
 

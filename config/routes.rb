@@ -57,6 +57,7 @@ Rails.application.routes.draw do
   get "/migrate/:token/export_recovery_data", to: "migrations#export_recovery_data", as: :export_recovery_data_migration_by_token
   post "/migrate/:token/retry_failed_blobs", to: "migrations#retry_failed_blobs", as: :retry_failed_blobs_by_token
   post "/migrate/:token/reauthenticate", to: "migrations#reauthenticate", as: :reauthenticate_by_token
+  post "/migrate/:token/reauthenticate_new_pds", to: "migrations#reauthenticate_new_pds", as: :reauthenticate_new_pds_by_token
   post "/migrate/:token/request_cancellation", to: "migrations#request_cancellation", as: :request_cancellation_by_token
   get "/migrate/:token/confirm_cancellation", to: "migrations#confirm_cancellation", as: :confirm_cancellation_by_token
   post "/migrate/:token/confirm_delete", to: "migrations#confirm_delete", as: :confirm_delete_by_token

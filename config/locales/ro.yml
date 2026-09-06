@@ -162,6 +162,7 @@ ro:
       confirm_email_access: "Vă rugăm să confirmați că aveți acces la această adresă de email."
       # Step 3
       select_server: "Vă rugăm să selectați un server sau să introduceți un URL de server personalizat"
+      captcha_unsupported: "Acest server cere verificare prin telefon sau captcha pentru conturile noi, iar aceasta nu poate fi finalizată de aici. Creați mai întâi contul pe acel server, apoi reveniți și selectați-l din nou — asistentul va detecta contul existent."
       checking_server: "Se verifică serverul..."
       checking_requirements: "Se verifică cerințele serverului..."
       server_verified: "Server verificat!"
@@ -233,6 +234,10 @@ ro:
       files: "fișiere"
       data_transferred: "Date transferate"
       failed: "Eșuate"
+      retry_failed_blobs: "Reîncercați fișierele eșuate"
+      missing_files_title: "Fișiere încă netransferate: %{count}"
+      missing_files_detail: "Sunt reîncercate automat în fundal, inclusiv după finalizarea migrării, și le puteți reîncerca acum. Puteți continua migrarea; imaginile sau videoclipurile afectate apar defecte până la sosirea fișierelor."
+      missing_files_completed: "Migrarea dvs. este finalizată, dar aceste fișiere sunt încă în curs de transfer în fundal. Imaginile sau videoclipurile afectate apar defecte până la sosirea lor. Le puteți reîncerca și acum. NU schimbați parola noului cont până nu primiți emailul nostru final care confirmă că au sosit toate fișierele — schimbarea ei mai devreme întrerupe transferul."
       preparing_blobs: "Se pregătesc <strong>%{count}</strong> blob-uri pentru transfer..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ ro:
       # PLC pending — header status
       status_waiting_for_you: "Se așteaptă răspunsul dvs."
       progress_waiting_for_you: "Acțiune necesară — vezi mai jos ↓"
+      last_updated: "Ultima actualizare %{time}"
+      poll_error: "actualizarea nu a reușit — verificați conexiunea"
+      refresh_now: "Actualizați acum"
 
       # PLC pending — action required banner
       action_required_title: "Acțiune necesară — Verificați-vă email-ul!"
@@ -344,6 +352,10 @@ ro:
       password_for: "Parola pentru %{handle}"
       enter_password_placeholder: "Introduceți parola contului"
       reauth_button: "Reautentificare și continuare migrare"
+      new_pds_reauth_safe: "Datele migrării sunt în siguranță — autentificarea în noul cont are nevoie doar de parola actuală."
+      new_pds_reauth_help: "Parola noului dvs. cont de pe <strong>%{pds}</strong> a fost respinsă. Aceasta se întâmplă dacă ați resetat parola acolo în timp ce migrarea era în așteptare. Introduceți parola actuală a noului cont pentru a continua."
+      new_pds_password_for: "Parola actuală a contului dvs. de pe %{pds}"
+      new_pds_reauth_button: "Salvați parola și continuați migrarea"
       plc_safe: "Datele migrării sunt în siguranță — aveți nevoie doar de un token PLC nou."
       plc_request_help: "Faceți clic pe butonul de mai jos pentru a solicita un token PLC nou. Îl veți primi prin email de la <strong>%{pds}</strong>."
       request_plc_confirm: "Solicitați un nou token PLC de la PDS-ul vechi?"
@@ -460,6 +472,11 @@ ro:
       tokens_missing: "Token-urile de autentificare lipsesc. Vă rugăm să reveniți și să vă reautentificați."
       account_not_found: "Nu s-a găsit niciun cont pe %{pds} cu DID-ul dumneavoastră (%{did}). Vă rugăm să reveniți și să selectați un alt PDS de destinație sau să porniți o migrare nouă."
       account_verify_failed: "Nu s-a putut verifica existența contului pe %{pds}: %{error}. Vă rugăm să încercați din nou."
+      invalid_target_host: "\"%{host}\" nu este o adresă de server validă. Reveniți la pasul 3 și selectați sau introduceți serverul de destinație (de exemplu pds.example.com)."
+      target_host_is_handle: "\"%{host}\" este identificatorul dvs. (handle), nu o adresă de server. Reveniți la pasul 3 și selectați din nou serverul de destinație."
+      captcha_unsupported: "%{pds} cere verificare prin telefon sau captcha pentru conturile noi, pe care acest instrument nu o poate finaliza. Creați mai întâi contul pe acel server, apoi porniți o nouă migrare și selectați-l din nou."
+      new_pds_reauth_failed: "Autentificarea în contul dvs. de pe %{pds} nu a reușit: %{error}. Verificați parola."
+      new_pds_reauth_success: "Parola contului dvs. de pe %{pds} a fost salvată. Acum puteți trimite codul de confirmare PLC sau puteți solicita unul nou."
       target_tokens_missing: "Token-urile de autentificare ale PDS-ului de destinație lipsesc. Vă rugăm să reveniți și să verificați credențialele pe %{pds}."
       reauth_not_available: "Reautentificarea nu este disponibilă în această etapă."
       reauth_failed: "Autentificare eșuată: %{error}. Vă rugăm să verificați parola."
@@ -548,6 +565,9 @@ ro:
       hosting_miss: "Mulți utilizatori ratează acest pas — fără furnizorul corect de găzduire, nu vă veți putea autentifica."
       change_password_heading: "SCHIMBAȚI PAROLA"
       change_password_help: "Pentru securitatea dumneavoastră, vă recomandăm insistent să schimbați parola imediat:"
+      missing_files_heading: "UNELE FIȘIERE SUNT ÎNCĂ ÎN CURS DE TRANSFER"
+      missing_files_help: "Numărul fișierelor (imagini sau videoclipuri) încă netransferate: %{count}. Sunt reîncercate automat în fundal; postările afectate afișează imagini defecte până la sosirea lor. IMPORTANT: nu schimbați parola noului cont până nu primiți emailul nostru final care confirmă că au sosit toate fișierele. Schimbarea ei mai devreme întrerupe transferul. Puteți urmări progresul și reîncerca pe pagina de stare:"
+      change_password_wait: "NU schimbați încă această parolă: unele dintre fișierele dvs. sunt încă în curs de transfer în fundal, iar schimbarea parolei ar întrerupe transferul. Așteptați emailul nostru final care confirmă că au sosit toate fișierele, apoi schimbați-o."
       change_password_later: "O puteți schimba și ulterior din setările contului."
       whats_next: "CE URMEAZĂ?"
       next1: "Contul dumneavoastră este acum activ pe %{pds}"
@@ -559,6 +579,23 @@ ro:
       privacy2: "Toate credențialele criptate au fost șterse în siguranță de pe serverele noastre"
       support: "Dacă aveți întrebări sau probleme, vă rugăm să contactați suportul cu token-ul de migrare:"
       email_footer: "Acest email a fost trimis la %{email} deoarece ați inițiat o migrare de cont."
+
+    blobs_transfer_complete:
+      subject: "Toate fișierele au fost transferate — migrarea dvs. este complet finalizată (%{token})"
+      heading: "TOATE FIȘIERELE AU SOSIT"
+      intro: "Fișierele care erau încă în curs de transfer la finalizarea migrării au sosit acum toate pe %{pds}. Postările, imaginile și videoclipurile dvs. sunt complete."
+      can_change_password: "Acum puteți schimba în siguranță parola contului dvs. de pe %{pds}."
+      status_page: "Pagina de stare a migrării (disponibilă până la ștergerea înregistrării migrării):"
+      support: "Dacă aveți nevoie de ajutor, contactați asistența și includeți tokenul de migrare:"
+
+    blobs_transfer_incomplete:
+      subject: "Fișiere care nu au putut fi transferate: %{count} (%{token})"
+      heading: "UNELE FIȘIERE NU AU PUTUT FI TRANSFERATE"
+      intro: "Numărul fișierelor (imagini sau videoclipuri) care nu au putut fi transferate pe %{pds} în ciuda mai multor încercări automate: %{count}. Postările afectate afișează imagini defecte."
+      what_to_do: "Deschideți pagina de stare și folosiți „Reîncercați fișierele eșuate”. Fiecare reîncercare folosește copiile din backupul dvs., deci nimic nu se pierde. Veți primi un email final după ce a sosit totul:"
+      keep_password: "Până atunci, NU schimbați parola contului dvs. de pe %{pds} — schimbarea ei întrerupe definitiv transferul."
+      support: "Dacă reîncercările continuă să eșueze, contactați asistența și includeți tokenul de migrare:"
+
 
     migration_failed:
       subject: "Migrare eșuată - Acțiune necesară (%{token})"
@@ -604,6 +641,7 @@ ro:
       key_warning: "Stocați această cheie într-un manager de parole sau altă locație sigură. NU o veți putea recupera ulterior."
       next_step: "Mergeți la pagina de migrare pentru a introduce codul de confirmare PLC:"
       check_email: "Verificați emailul pentru un cod de la furnizorul PDS vechi — arată ca XXXXX-XXXXX"
+      no_password_reset: "Important: nu vă autentificați în noul cont de pe %{pds} și nu resetați parola acolo până la finalizarea acestei migrări. Resetarea parolei invalidează datele de autentificare folosite de migrare, iar aceasta va eșua."
 
     plc_token_failed:
       subject: "Acțiune necesară: Solicitați un nou cod de confirmare PLC (%{token})"

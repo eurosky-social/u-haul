@@ -256,7 +256,7 @@ services:
     ports:
       - "80:80"      # HTTP (redirects to HTTPS)
       - "443:443"    # HTTPS (Let's Encrypt automatic)
-      - "2019:2019"  # Admin API (optional, can disable in production)
+      # Admin API is disabled in Caddyfile.production (admin off) - not exposed
     environment:
       DOMAIN: ${DOMAIN}
       LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
@@ -269,7 +269,10 @@ services:
       eurosky-web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/config/"]
+      # Plain-HTTP health site defined in Caddyfile.production. The admin API
+      # (localhost:2019) is off in production and http://localhost/ redirects to
+      # HTTPS, so probing either of those reports "unhealthy" forever.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 5s
       retries: 3

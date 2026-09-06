@@ -1,0 +1,13 @@
+<%= t('mailers.blobs_transfer_complete.heading') %>
+================================================================================
+
+<%= t('mailers.blobs_transfer_complete.intro', pds: @migration.new_pds_host) %>
+
+<%= t('mailers.blobs_transfer_complete.can_change_password', pds: @migration.new_pds_host) %>
+
+<%= t('mailers.blobs_transfer_complete.status_page') %>
+
+  <%= @migration_url %>
+
+--------------------------------------------------------------------------------
+<%= t('mailers.blobs_transfer_complete.support') %> <%= @migration.token %>

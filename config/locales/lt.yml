@@ -162,6 +162,7 @@ lt:
       confirm_email_access: "Patvirtinkite, kad turite prieigą prie šio el. pašto adreso."
       # Step 3
       select_server: "Pasirinkite serverį arba įveskite pasirinktinio serverio URL"
+      captcha_unsupported: "Šis serveris naujoms paskyroms reikalauja patvirtinimo telefonu arba captcha, kurio iš čia atlikti negalima. Pirmiausia sukurkite paskyrą tame serveryje, tada grįžkite ir pasirinkite jį dar kartą — vedlys aptiks esamą paskyrą."
       checking_server: "Tikrinamas serveris..."
       checking_requirements: "Tikrinami serverio reikalavimai..."
       server_verified: "Serveris patvirtintas!"
@@ -233,6 +234,10 @@ lt:
       files: "failai"
       data_transferred: "Perduota duomenų"
       failed: "Nepavyko"
+      retry_failed_blobs: "Bandyti nepavykusius failus dar kartą"
+      missing_files_title: "Dar neperkelti failai: %{count}"
+      missing_files_detail: "Jie automatiškai bandomi dar kartą fone, taip pat ir po perkėlimo pabaigos, o pabandyti galite ir dabar. Galite tęsti perkėlimą; paveikti vaizdai ar vaizdo įrašai atrodys sugadinti, kol failai nebus gauti."
+      missing_files_completed: "Jūsų perkėlimas baigtas, tačiau šie failai vis dar perkeliami fone. Paveikti vaizdai ar vaizdo įrašai atrodo sugadinti, kol jie nebus gauti. Taip pat galite pabandyti dar kartą dabar. NEKEISKITE naujos paskyros slaptažodžio, kol negausite mūsų galutinio el. laiško, patvirtinančio, kad gauti visi failai — ankstesnis pakeitimas nutraukia perkėlimą."
       preparing_blobs: "Ruošiamasi perkelti <strong>%{count}</strong> blob..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ lt:
       # PLC pending — header status
       status_waiting_for_you: "Laukiama jūsų atsakymo"
       progress_waiting_for_you: "Reikalingas veiksmas — žiūrėkite žemiau ↓"
+      last_updated: "Paskutinį kartą atnaujinta %{time}"
+      poll_error: "nepavyko atnaujinti — patikrinkite ryšį"
+      refresh_now: "Atnaujinti dabar"
 
       # PLC pending — action required banner
       action_required_title: "Reikalingas veiksmas — Patikrinkite savo el. paštą!"
@@ -344,6 +352,10 @@ lt:
       password_for: "Slaptažodis %{handle}"
       enter_password_placeholder: "Įveskite paskyros slaptažodį"
       reauth_button: "Pakartotinai autentifikuotis ir tęsti perkėlimą"
+      new_pds_reauth_safe: "Jūsų perkėlimo duomenys saugūs — prisijungimui prie naujos paskyros reikia tik dabartinio slaptažodžio."
+      new_pds_reauth_help: "Jūsų naujos paskyros slaptažodis serveryje <strong>%{pds}</strong> buvo atmestas. Taip nutinka, jei ten iš naujo nustatėte slaptažodį, kol perkėlimas laukė. Norėdami tęsti, įveskite dabartinį naujos paskyros slaptažodį."
+      new_pds_password_for: "Dabartinis jūsų paskyros slaptažodis serveryje %{pds}"
+      new_pds_reauth_button: "Išsaugoti slaptažodį ir tęsti perkėlimą"
       plc_safe: "Jūsų perkėlimo duomenys saugūs — tiesiog reikia naujo PLC žetono."
       plc_request_help: "Spustelėkite žemiau esantį mygtuką, kad paprašytumėte naujo PLC žetono. Jį gausite el. paštu nuo <strong>%{pds}</strong>."
       request_plc_confirm: "Prašyti naujo PLC žetono iš jūsų senojo PDS?"
@@ -460,6 +472,11 @@ lt:
       tokens_missing: "Trūksta autentifikacijos žetonų. Grįžkite atgal ir pakartotinai autentifikuokitės."
       account_not_found: "Paskyra su jūsų DID (%{did}) nerasta %{pds}. Grįžkite ir pasirinkite kitą paskirties PDS arba pradėkite naują perkėlimą."
       account_verify_failed: "Nepavyko patikrinti paskyros egzistavimo %{pds}: %{error}. Bandykite dar kartą."
+      invalid_target_host: "\"%{host}\" nėra galiojantis serverio adresas. Grįžkite į 3 žingsnį ir pasirinkite arba įveskite paskirties serverį (pavyzdžiui, pds.example.com)."
+      target_host_is_handle: "\"%{host}\" yra jūsų vardas (handle), o ne serverio adresas. Grįžkite į 3 žingsnį ir dar kartą pasirinkite paskirties serverį."
+      captcha_unsupported: "%{pds} naujoms paskyroms reikalauja patvirtinimo telefonu arba captcha, kurio šis įrankis atlikti negali. Pirmiausia sukurkite paskyrą tame serveryje, tada pradėkite naują perkėlimą ir pasirinkite jį dar kartą."
+      new_pds_reauth_failed: "Nepavyko prisijungti prie jūsų paskyros serveryje %{pds}: %{error}. Patikrinkite slaptažodį."
+      new_pds_reauth_success: "Jūsų paskyros slaptažodis serveryje %{pds} išsaugotas. Dabar galite pateikti PLC patvirtinimo kodą arba paprašyti naujo."
       target_tokens_missing: "Trūksta paskirties PDS autentifikacijos žetonų. Grįžkite ir patvirtinkite savo prisijungimo duomenis %{pds}."
       reauth_not_available: "Pakartotinė autentifikacija šioje stadijoje negalima."
       reauth_failed: "Autentifikacija nepavyko: %{error}. Patikrinkite slaptažodį."
@@ -548,6 +565,9 @@ lt:
       hosting_miss: "Daugelis vartotojų praleidžia šį žingsnį — be teisingo prieglobos teikėjo nepavyks prisijungti."
       change_password_heading: "PAKEISKITE SLAPTAŽODĮ"
       change_password_help: "Jūsų saugumui primygtinai rekomenduojame nedelsiant pakeisti slaptažodį:"
+      missing_files_heading: "KAI KURIE FAILAI VIS DAR PERKELIAMI"
+      missing_files_help: "Dar neperkeltų failų (vaizdų ar vaizdo įrašų) skaičius: %{count}. Jie automatiškai bandomi dar kartą fone; paveikti įrašai rodo sugadintus vaizdus, kol failai nebus gauti. SVARBU: nekeiskite naujos paskyros slaptažodžio, kol negausite mūsų galutinio el. laiško, patvirtinančio, kad gauti visi failai. Ankstesnis pakeitimas nutraukia perkėlimą. Eigą galite stebėti ir bandyti dar kartą būsenos puslapyje:"
+      change_password_wait: "Kol kas NEKEISKITE šio slaptažodžio: kai kurie jūsų failai vis dar perkeliami fone, o slaptažodžio pakeitimas nutrauktų perkėlimą. Palaukite mūsų galutinio el. laiško, patvirtinančio, kad gauti visi failai, ir tada jį pakeiskite."
       change_password_later: "Taip pat galite jį pakeisti vėliau paskyros nustatymuose."
       whats_next: "KAS BUS TOLIAU?"
       next1: "Jūsų paskyra dabar aktyvi %{pds}"
@@ -559,6 +579,23 @@ lt:
       privacy2: "Visi užšifruoti prisijungimo duomenys saugiai ištrinti iš mūsų serverių"
       support: "Jei turite klausimų ar problemų, susisiekite su palaikymo tarnyba nurodydami perkėlimo žetoną:"
       email_footer: "Šis el. laiškas buvo išsiųstas adresu %{email}, nes jūs pradėjote paskyros perkėlimą."
+
+    blobs_transfer_complete:
+      subject: "Visi failai perkelti — jūsų perkėlimas visiškai baigtas (%{token})"
+      heading: "GAUTI VISI FAILAI"
+      intro: "Failai, kurie perkėlimo pabaigoje dar buvo perkeliami, dabar visi pasiekė %{pds}. Jūsų įrašai, vaizdai ir vaizdo įrašai yra išsamūs."
+      can_change_password: "Dabar galite saugiai pakeisti savo paskyros slaptažodį serveryje %{pds}."
+      status_page: "Perkėlimo būsenos puslapis (pasiekiamas, kol perkėlimo įrašas nebus ištrintas):"
+      support: "Jei reikia pagalbos, kreipkitės į palaikymo tarnybą ir nurodykite savo perkėlimo žetoną:"
+
+    blobs_transfer_incomplete:
+      subject: "Failai, kurių nepavyko perkelti: %{count} (%{token})"
+      heading: "KAI KURIŲ FAILŲ PERKELTI NEPAVYKO"
+      intro: "Failų (vaizdų ar vaizdo įrašų), kurių nepaisant kelių automatinių bandymų nepavyko perkelti į %{pds}, skaičius: %{count}. Paveikti įrašai rodo sugadintus vaizdus."
+      what_to_do: "Atidarykite būsenos puslapį ir naudokite „Bandyti nepavykusius failus dar kartą“. Kiekvienas bandymas naudoja kopijas iš jūsų atsarginės kopijos, todėl niekas neprarandama. Kai viskas bus gauta, gausite galutinį el. laišką:"
+      keep_password: "Iki tol NEKEISKITE savo paskyros slaptažodžio serveryje %{pds} — pakeitimas visam laikui nutraukia perkėlimą."
+      support: "Jei bandymai ir toliau nepavyksta, kreipkitės į palaikymo tarnybą ir nurodykite savo perkėlimo žetoną:"
+
 
     migration_failed:
       subject: "Perkėlimas nepavyko - reikalingas veiksmas (%{token})"
@@ -604,6 +641,7 @@ lt:
       key_warning: "Saugokite šį raktą slaptažodžių tvarkyklėje ar kitoje saugioje vietoje. Vėliau jo NEGALĖSITE gauti."
       next_step: "Eikite į perkėlimo puslapį ir įveskite PLC patvirtinimo kodą:"
       check_email: "Patikrinkite el. paštą dėl kodo nuo senojo PDS teikėjo — jis atrodo taip: XXXXX-XXXXX"
+      no_password_reset: "Svarbu: neprisijunkite prie naujos paskyros serveryje %{pds} ir ten neatkurkite slaptažodžio, kol šis perkėlimas nebus baigtas. Slaptažodžio atkūrimas panaikina perkėlimo naudojamų prisijungimo duomenų galiojimą, ir perkėlimas nepavyks."
 
     plc_token_failed:
       subject: "Reikalingas veiksmas: Prašykite naujo PLC patvirtinimo kodo (%{token})"

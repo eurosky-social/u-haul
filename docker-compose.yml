@@ -1,5 +1,6 @@
-version: '3.9'
-
+# Development / quick-start stack. Self-contained: everything it needs is
+# defined here. To reach PDS instances from a local u-at-proto checkout, add
+# the override file: docker compose -f docker-compose.yml -f docker-compose.u-at-proto.yml up
 services:
   eurosky-postgres:
     image: postgres:15-alpine
@@ -51,6 +52,9 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres:5432/eurosky_migration_${RAILS_ENV:-development}
       REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis:6379/0
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      # Lockbox key for encrypted credentials (64 hex chars). Required when
+      # RAILS_ENV=production; development falls back to a generated key.
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-}
     depends_on:
       eurosky-postgres:
         condition: service_healthy
@@ -60,7 +64,6 @@ services:
       - .env
     networks:
       - eurosky-internal
-      - u-at-proto_default
 
   eurosky-web:
     build: .
@@ -74,6 +77,9 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres:5432/eurosky_migration_${RAILS_ENV:-development}
       REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis:6379/0
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      # Lockbox key for encrypted credentials (64 hex chars). Required when
+      # RAILS_ENV=production; development falls back to a generated key.
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-}
       RAILS_MAX_THREADS: "5"
       PORT: 3000
       MAX_CONCURRENT_MIGRATIONS: ${MAX_CONCURRENT_MIGRATIONS:-100}
@@ -102,7 +108,6 @@ services:
     restart: unless-stopped
     networks:
       - eurosky-internal
-      - u-at-proto_default
 
   eurosky-sidekiq:
     build: .
@@ -116,6 +121,9 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres:5432/eurosky_migration_${RAILS_ENV:-development}
       REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis:6379/0
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      # Lockbox key for encrypted credentials (64 hex chars). Required when
+      # RAILS_ENV=production; development falls back to a generated key.
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-}
       RAILS_MAX_THREADS: ${SIDEKIQ_CONCURRENCY:-60}
       MAX_CONCURRENT_MIGRATIONS: ${MAX_CONCURRENT_MIGRATIONS:-100}
       ATP_PLC_HOST: ${ATP_PLC_HOST:-https://plc.directory}
@@ -138,7 +146,6 @@ services:
     restart: unless-stopped
     networks:
       - eurosky-internal
-      - u-at-proto_default
 
   # Dedicated Sidekiq process for critical + mailer jobs
   # Handles UpdatePlcJob, ActivateAccountJob, and email delivery.
@@ -156,6 +163,9 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@eurosky-postgres:5432/eurosky_migration_${RAILS_ENV:-development}
       REDIS_URL: redis://:${REDIS_PASSWORD}@eurosky-redis:6379/0
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      # Lockbox key for encrypted credentials (64 hex chars). Required when
+      # RAILS_ENV=production; development falls back to a generated key.
+      LOCKBOX_MASTER_KEY: ${MIGRATION_MASTER_KEY:-}
       RAILS_MAX_THREADS: "5"
       ATP_PLC_HOST: ${ATP_PLC_HOST:-https://plc.directory}
       PDS_DISABLE_SSRF_PROTECTION: "true"
@@ -177,7 +187,6 @@ services:
     restart: unless-stopped
     networks:
       - eurosky-internal
-      - u-at-proto_default
 
   # Caddy removed - conflicts with Traefik on ports 80/443
   # Access the app directly at http://localhost:3001 instead
@@ -194,6 +203,3 @@ networks:
   eurosky-internal:
     name: eurosky-internal
     driver: bridge
-  u-at-proto_default:
-    # Connect to u-at-proto network to access PDS instances
-    external: true

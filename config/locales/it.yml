@@ -162,6 +162,7 @@ it:
       confirm_email_access: "Conferma di avere accesso a questo indirizzo e-mail."
       # Step 3
       select_server: "Seleziona un server o inserisci l'URL di un server personalizzato"
+      captcha_unsupported: "Questo server richiede una verifica tramite telefono o captcha per i nuovi account, che non può essere completata da qui. Crea prima l'account su quel server, poi torna e selezionalo di nuovo: la procedura guidata rileverà l'account esistente."
       checking_server: "Verifica del server..."
       checking_requirements: "Verifica dei requisiti del server..."
       server_verified: "Server verificato!"
@@ -233,6 +234,10 @@ it:
       files: "file"
       data_transferred: "Dati trasferiti"
       failed: "Non riusciti"
+      retry_failed_blobs: "Riprova i file non riusciti"
+      missing_files_title: "File non ancora trasferiti: %{count}"
+      missing_files_detail: "Vengono ritentati automaticamente in background, anche dopo il completamento della migrazione, e puoi riprovare ora. Puoi continuare con la migrazione; le immagini o i video interessati appariranno danneggiati finché i file non saranno arrivati."
+      missing_files_completed: "La migrazione è completata, ma questi file sono ancora in trasferimento in background. Le immagini o i video interessati appaiono danneggiati finché non arrivano. Puoi anche riprovare ora. NON cambiare la password del nuovo account finché non ricevi la nostra e-mail finale che conferma l'arrivo di tutti i file: cambiarla prima interrompe il trasferimento."
       preparing_blobs: "Preparazione al trasferimento di <strong>%{count}</strong> blob..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ it:
       # PLC pending — header status
       status_waiting_for_you: "In attesa del tuo input"
       progress_waiting_for_you: "Azione richiesta — vedi sotto ↓"
+      last_updated: "Ultimo aggiornamento %{time}"
+      poll_error: "impossibile aggiornare — controlla la connessione"
+      refresh_now: "Aggiorna ora"
 
       # PLC pending — action required banner
       action_required_title: "Azione richiesta — Controlla la tua email!"
@@ -344,6 +352,10 @@ it:
       password_for: "Password per %{handle}"
       enter_password_placeholder: "Inserisci la password dell'account"
       reauth_button: "Riautentica e continua la migrazione"
+      new_pds_reauth_safe: "I dati della migrazione sono al sicuro: per accedere al nuovo account serve solo la password attuale."
+      new_pds_reauth_help: "La password del nuovo account su <strong>%{pds}</strong> è stata rifiutata. Succede se hai reimpostato la password lì mentre la migrazione era in sospeso. Inserisci la password attuale del nuovo account per continuare."
+      new_pds_password_for: "Password attuale del tuo account su %{pds}"
+      new_pds_reauth_button: "Salva la password e continua la migrazione"
       plc_safe: "I tuoi dati di migrazione sono al sicuro — serve solo un nuovo token PLC."
       plc_request_help: "Fai clic sul pulsante qui sotto per richiedere un nuovo token PLC. Lo riceverai via e-mail da <strong>%{pds}</strong>."
       request_plc_confirm: "Richiedere un nuovo token PLC dal tuo vecchio PDS?"
@@ -460,6 +472,11 @@ it:
       tokens_missing: "I token di autenticazione mancano. Torna indietro e riautenticati."
       account_not_found: "Nessun account trovato su %{pds} con il tuo DID (%{did}). Torna indietro e seleziona un PDS di destinazione diverso, oppure avvia una nuova migrazione."
       account_verify_failed: "Verifica dell'esistenza dell'account su %{pds} non riuscita: %{error}. Riprova."
+      invalid_target_host: "\"%{host}\" non è un indirizzo server valido. Torna al passaggio 3 e seleziona o inserisci il server di destinazione (ad esempio pds.example.com)."
+      target_host_is_handle: "\"%{host}\" è il tuo handle, non un indirizzo server. Torna al passaggio 3 e seleziona di nuovo il server di destinazione."
+      captcha_unsupported: "%{pds} richiede una verifica tramite telefono o captcha per i nuovi account, che questo strumento non può completare. Crea prima l'account su quel server, poi avvia una nuova migrazione e selezionalo di nuovo."
+      new_pds_reauth_failed: "Impossibile accedere al tuo account su %{pds}: %{error}. Controlla la password."
+      new_pds_reauth_success: "Password del tuo account su %{pds} salvata. Ora puoi inviare il codice di conferma PLC o richiederne uno nuovo."
       target_tokens_missing: "I token di autenticazione del PDS di destinazione mancano. Torna indietro e verifica le tue credenziali su %{pds}."
       reauth_not_available: "La riautenticazione non è disponibile in questa fase."
       reauth_failed: "Autenticazione non riuscita: %{error}. Verifica la password."
@@ -548,6 +565,9 @@ it:
       hosting_miss: "Molti utenti saltano questo passaggio — senza il provider di hosting corretto, non potrai accedere."
       change_password_heading: "CAMBIA LA TUA PASSWORD"
       change_password_help: "Per la tua sicurezza, ti consigliamo vivamente di cambiare la password immediatamente:"
+      missing_files_heading: "ALCUNI FILE SONO ANCORA IN TRASFERIMENTO"
+      missing_files_help: "Numero di file (immagini o video) non ancora trasferiti: %{count}. Vengono ritentati automaticamente in background; i post interessati mostrano immagini danneggiate finché non arrivano. IMPORTANTE: non cambiare la password del nuovo account finché non ricevi la nostra e-mail finale che conferma l'arrivo di tutti i file. Cambiarla prima interrompe il trasferimento. Puoi controllare l'avanzamento e riprovare nella pagina di stato:"
+      change_password_wait: "NON cambiare ancora questa password: alcuni dei tuoi file sono ancora in trasferimento in background e cambiare la password interromperebbe il trasferimento. Attendi la nostra e-mail finale che conferma l'arrivo di tutti i file, poi cambiala."
       change_password_later: "Puoi anche cambiarla successivamente nelle impostazioni dell'account."
       whats_next: "COSA SUCCEDE DOPO?"
       next1: "Il tuo account è ora attivo su %{pds}"
@@ -559,6 +579,23 @@ it:
       privacy2: "Tutte le credenziali crittografate sono state cancellate in modo sicuro dai nostri server"
       support: "Per domande o problemi, contatta l'assistenza con il tuo token di migrazione:"
       email_footer: "Questa e-mail è stata inviata a %{email} perché hai avviato una migrazione dell'account."
+
+    blobs_transfer_complete:
+      subject: "Tutti i file trasferiti: la tua migrazione è completamente conclusa (%{token})"
+      heading: "TUTTI I FILE SONO ARRIVATI"
+      intro: "I file ancora in trasferimento al completamento della migrazione sono ora tutti arrivati su %{pds}. I tuoi post, immagini e video sono completi."
+      can_change_password: "Ora puoi cambiare in sicurezza la password del tuo account su %{pds}."
+      status_page: "Pagina di stato della migrazione (disponibile finché il record della migrazione non viene eliminato):"
+      support: "Se hai bisogno di aiuto, contatta il supporto indicando il tuo token di migrazione:"
+
+    blobs_transfer_incomplete:
+      subject: "File che non è stato possibile trasferire: %{count} (%{token})"
+      heading: "ALCUNI FILE NON SONO STATI TRASFERITI"
+      intro: "Numero di file (immagini o video) che non è stato possibile trasferire su %{pds} nonostante diversi tentativi automatici: %{count}. I post interessati mostrano immagini danneggiate."
+      what_to_do: "Apri la pagina di stato e usa «Riprova i file non riusciti». Ogni tentativo usa le copie del tuo backup, quindi non si perde nulla. Riceverai un'e-mail finale quando sarà arrivato tutto:"
+      keep_password: "Fino ad allora, NON cambiare la password del tuo account su %{pds}: cambiarla interrompe definitivamente il trasferimento."
+      support: "Se i tentativi continuano a fallire, contatta il supporto indicando il tuo token di migrazione:"
+
 
     migration_failed:
       subject: "Migrazione non riuscita - Intervento richiesto (%{token})"
@@ -604,6 +641,7 @@ it:
       key_warning: "Conserva questa chiave in un gestore di password o in un'altra posizione sicura. NON potrai recuperarla in seguito."
       next_step: "Vai alla pagina di migrazione per inserire il codice di conferma PLC:"
       check_email: "Controlla la tua e-mail per un codice dal tuo vecchio fornitore PDS — ha questo formato: XXXXX-XXXXX"
+      no_password_reset: "Importante: non accedere al nuovo account su %{pds} e non reimpostarne la password finché questa migrazione non è completata. Reimpostare la password invalida le credenziali usate dalla migrazione, che fallirà."
 
     plc_token_failed:
       subject: "Intervento richiesto: Richiedi un nuovo codice di conferma PLC (%{token})"

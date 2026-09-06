@@ -31,6 +31,9 @@ class CreateAccountJob < ApplicationJob
   # Don't retry account exists errors - they require manual intervention
   discard_on GoatService::AccountExistsError
 
+  # Don't retry when the email is already registered on the target - the user must act
+  discard_on GoatService::EmailTakenError
+
   # Don't retry invalid invite code errors - user needs to start a new migration
   discard_on GoatService::InvalidInviteCodeError
 
@@ -107,6 +110,10 @@ class CreateAccountJob < ApplicationJob
 
     Rails.logger.info("[CreateAccountJob] Completed successfully for migration #{migration.token}")
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    Rails.logger.warn("[CreateAccountJob] #{e.message}")
+
   rescue ActiveRecord::RecordNotFound => e
     Rails.logger.error("[CreateAccountJob] Migration not found: #{migration_id}")
     # Don't retry if migration doesn't exist
@@ -141,6 +148,25 @@ class CreateAccountJob < ApplicationJob
         Rails.logger.error("[CreateAccountJob] Failed to send invalid invite code notification: #{email_error.message}")
       end
     end
+    raise
+
+  rescue GoatService::EmailTakenError => e
+    Rails.logger.error("[CreateAccountJob] Email already taken for migration #{migration&.token}: #{e.message}")
+    if migration
+      migration.mark_failed!(
+        "#{e.message} Log in to that account on #{migration.new_pds_host} and change its email address, " \
+        "or start a new migration with a different email address.",
+        error_code: :email_taken
+      )
+
+      begin
+        MigrationMailer.migration_failed(migration).deliver_later
+        Rails.logger.info("[CreateAccountJob] Sent email-taken failure notification to #{migration.email}")
+      rescue => email_error
+        Rails.logger.error("[CreateAccountJob] Failed to send email-taken notification: #{email_error.message}")
+      end
+    end
+    # Re-raise to trigger discard_on (no retries - the user has to act)
     raise
 
   rescue GoatService::AccountExistsError => e

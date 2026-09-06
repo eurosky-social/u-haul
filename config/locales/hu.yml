@@ -162,6 +162,7 @@ hu:
       confirm_email_access: "Kerem, erositse meg, hogy hozzafer ehhez az e-mail cimhez."
       # Step 3
       select_server: "Valasszon szervert, vagy adja meg egy egyeni szerver URL-jet"
+      captcha_unsupported: "Ez a szerver telefonos vagy captcha-ellenőrzést kér az új fiókokhoz, amit innen nem lehet elvégezni. Először hozza létre a fiókot azon a szerveren, majd térjen vissza és válassza ki újra — a varázsló felismeri a meglévő fiókot."
       checking_server: "Szerver ellenorzese..."
       checking_requirements: "Szerverk kovetelmenyek ellenorzese..."
       server_verified: "Szerver ellenorizve!"
@@ -233,6 +234,10 @@ hu:
       files: "fajl"
       data_transferred: "Atvitt adatok"
       failed: "Sikertelen"
+      retry_failed_blobs: "Sikertelen fájlok újrapróbálása"
+      missing_files_title: "Még át nem vitt fájlok: %{count}"
+      missing_files_detail: "A rendszer automatikusan újrapróbálja őket a háttérben, a költöztetés befejezése után is, és Ön most is újrapróbálhatja. Folytathatja a költöztetést; az érintett képek vagy videók hibásnak látszanak, amíg a fájlok meg nem érkeznek."
+      missing_files_completed: "A költöztetése befejeződött, de ezek a fájlok még átvitel alatt állnak a háttérben. Az érintett képek vagy videók hibásnak látszanak, amíg meg nem érkeznek. Most is újrapróbálhatja őket. NE változtassa meg az új fiókja jelszavát, amíg meg nem kapja a záró e-mailünket, amely megerősíti, hogy minden fájl megérkezett — a korábbi módosítás megszakítja az átvitelt."
       preparing_blobs: "<strong>%{count}</strong> blob atvitelnek elokeszitese..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ hu:
       # PLC pending — header status
       status_waiting_for_you: "Várakozás az Ön válaszára"
       progress_waiting_for_you: "Beavatkozás szükséges — lásd lent ↓"
+      last_updated: "Utoljára frissítve: %{time}"
+      poll_error: "a frissítés nem sikerült — ellenőrizze a kapcsolatát"
+      refresh_now: "Frissítés most"
 
       # PLC pending — action required banner
       action_required_title: "Beavatkozás szükséges — Ellenőrizze az e-mailjeit!"
@@ -344,6 +352,10 @@ hu:
       password_for: "Jelszo a(z) %{handle} fiokhoz"
       enter_password_placeholder: "Adja meg a fiok jelszavat"
       reauth_button: "Ujrahitelesites es migracio folytatas"
+      new_pds_reauth_safe: "A költöztetési adatai biztonságban vannak — az új fiókba való bejelentkezéshez csak az aktuális jelszó kell."
+      new_pds_reauth_help: "Az új fiókja jelszavát a(z) <strong>%{pds}</strong> szerver elutasította. Ez akkor fordul elő, ha ott visszaállította a jelszót, miközben a költöztetés függőben volt. A folytatáshoz adja meg az új fiókja aktuális jelszavát."
+      new_pds_password_for: "A(z) %{pds} szerveren lévő fiókja aktuális jelszava"
+      new_pds_reauth_button: "Jelszó mentése és a költöztetés folytatása"
       plc_safe: "A migracios adatai biztonsagban vannak — csak egy uj PLC tokenre van szukseg."
       plc_request_help: "Kattintson az alanti gombra uj PLC token keresere. E-mailben kapja meg a(z) <strong>%{pds}</strong> szervertol."
       request_plc_confirm: "Uj PLC tokent ker a regi PDS-etol?"
@@ -460,6 +472,11 @@ hu:
       tokens_missing: "A hitelesitesi tokenek hianyoznak. Kerem, menjen vissza, es hitelesitse ujra magat."
       account_not_found: "Nem talalhato fiok a(z) %{pds} szerveren az On DID-jevel (%{did}). Kerem, menjen vissza, es valasszon masik cel-PDS-t, vagy inditson uj migraciot."
       account_verify_failed: "A fiok letezésenek ellenorzese a(z) %{pds} szerveren nem sikerult: %{error}. Kerem, probalja ujra."
+      invalid_target_host: "A(z) \"%{host}\" nem érvényes szervercím. Lépjen vissza a 3. lépéshez, és válassza ki vagy adja meg a célszervert (például pds.example.com)."
+      target_host_is_handle: "A(z) \"%{host}\" az Ön azonosítója (handle), nem szervercím. Lépjen vissza a 3. lépéshez, és válassza ki újra a célszervert."
+      captcha_unsupported: "A(z) %{pds} telefonos vagy captcha-ellenőrzést kér az új fiókokhoz, amit ez az eszköz nem tud elvégezni. Először hozza létre a fiókot azon a szerveren, majd indítson új költöztetést, és válassza ki újra."
+      new_pds_reauth_failed: "Nem sikerült bejelentkezni a(z) %{pds} szerveren lévő fiókjába: %{error}. Ellenőrizze a jelszót."
+      new_pds_reauth_success: "A(z) %{pds} szerveren lévő fiókja jelszava mentve. Most beküldheti a PLC megerősítő kódját, vagy kérhet újat."
       target_tokens_missing: "A cel-PDS hitelesitesi tokenjei hianyoznak. Kerem, menjen vissza, es erositse meg hitelesito adatait a(z) %{pds} szerveren."
       reauth_not_available: "Az ujrahitelesites ebben a fazisban nem elerheto."
       reauth_failed: "A hitelesites nem sikerult: %{error}. Kerem, ellenorizze a jelszavat."
@@ -548,6 +565,9 @@ hu:
       hosting_miss: "Sok felhasznalo kihagyja ezt a lepest — a helyes tarhelyszolgaltato nelkul nem tud bejelentkezni."
       change_password_heading: "VALTOZTASSA MEG A JELSZAVAT"
       change_password_help: "Biztonsaga erdekeben nyomatekosan javasoljuk a jelszo azonnali megvaltoztatasat:"
+      missing_files_heading: "NÉHÁNY FÁJL ÁTVITELE MÉG FOLYAMATBAN VAN"
+      missing_files_help: "A még át nem vitt fájlok (képek vagy videók) száma: %{count}. A rendszer automatikusan újrapróbálja őket a háttérben; az érintett bejegyzések hibás képeket mutatnak, amíg meg nem érkeznek. FONTOS: ne változtassa meg az új fiókja jelszavát, amíg meg nem kapja a záró e-mailünket, amely megerősíti, hogy minden fájl megérkezett. A korábbi módosítás megszakítja az átvitelt. Az előrehaladást az állapotoldalon követheti, és ott újra is próbálkozhat:"
+      change_password_wait: "MÉG NE változtassa meg ezt a jelszót: néhány fájlja még átvitel alatt áll a háttérben, és a jelszó megváltoztatása megszakítaná az átvitelt. Várja meg a záró e-mailünket, amely megerősíti, hogy minden fájl megérkezett, és utána változtassa meg."
       change_password_later: "Kesobb a fiokbeallitasokban is megvaltoztathatja."
       whats_next: "MI TORTENIK EZUTAN?"
       next1: "Fiokja most aktiv a(z) %{pds} szerveren"
@@ -559,6 +579,23 @@ hu:
       privacy2: "Minden titkositott hitelesito adat biztonsagosan torolve lett a szerverinkrol"
       support: "Ha kerdese vagy problemaja van, kerem, forduljon a tamogatashoz a migracios tokenjevel:"
       email_footer: "Ez az e-mail a(z) %{email} cimre lett kuldve, mert On fiokmigracioot inditott."
+
+    blobs_transfer_complete:
+      subject: "Minden fájl átkerült — a költöztetése teljesen befejeződött (%{token})"
+      heading: "MINDEN FÁJL MEGÉRKEZETT"
+      intro: "Azok a fájlok, amelyek a költöztetés befejezésekor még átvitel alatt álltak, mostanra mind megérkeztek a(z) %{pds} szerverre. A bejegyzései, képei és videói hiánytalanok."
+      can_change_password: "Most már biztonságosan megváltoztathatja a(z) %{pds} szerveren lévő fiókja jelszavát."
+      status_page: "A költöztetés állapotoldala (a költöztetési rekord törléséig elérhető):"
+      support: "Ha segítségre van szüksége, forduljon az ügyfélszolgálathoz, és adja meg a költöztetési tokenjét:"
+
+    blobs_transfer_incomplete:
+      subject: "Át nem vihető fájlok: %{count} (%{token})"
+      heading: "NÉHÁNY FÁJLT NEM SIKERÜLT ÁTVINNI"
+      intro: "Azon fájlok (képek vagy videók) száma, amelyeket több automatikus próbálkozás ellenére sem sikerült átvinni a(z) %{pds} szerverre: %{count}. Az érintett bejegyzések hibás képeket mutatnak."
+      what_to_do: "Nyissa meg az állapotoldalt, és használja a „Sikertelen fájlok újrapróbálása” gombot. Minden próbálkozás a biztonsági mentésében lévő másolatokat használja, így semmi sem vész el. Amint minden megérkezett, záró e-mailt kap:"
+      keep_password: "Addig NE változtassa meg a(z) %{pds} szerveren lévő fiókja jelszavát — a módosítás végleg megszakítja az átvitelt."
+      support: "Ha a próbálkozások továbbra is sikertelenek, forduljon az ügyfélszolgálathoz, és adja meg a költöztetési tokenjét:"
+
 
     migration_failed:
       subject: "Migracio sikertelen - beavatkozas szukseges (%{token})"
@@ -604,6 +641,7 @@ hu:
       key_warning: "Tarolja ezt a kulcsot jelszokezeloben vagy mas biztonsagos helyen. Kesobb NEM fogja tudni lekerni."
       next_step: "Menjen a migracios oldalra a PLC megerosito kod megadasahoz:"
       check_email: "Ellenorizze e-mailjeit a regi PDS-szolgaltatojatol kapott kodert — igy nez ki: XXXXX-XXXXX"
+      no_password_reset: "Fontos: ne jelentkezzen be az új fiókjába a(z) %{pds} szerveren, és ne állítsa vissza ott a jelszót, amíg ez a költöztetés be nem fejeződik. A jelszó visszaállítása érvényteleníti a költöztetés által használt hitelesítő adatokat, és a költöztetés meghiúsul."
 
     plc_token_failed:
       subject: "Beavatkozas szukseges: Kerjen uj PLC megerosito kodot (%{token})"

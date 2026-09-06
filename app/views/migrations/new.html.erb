@@ -666,6 +666,7 @@
               inviteCodeField.focus();
             } else {
               hideTargetPasswordSection();
+              if (blockIfCaptchaUnsupported(step3Error)) return;
               if (!checkPdsConsentBeforeProceeding()) return;
               wizardData.pdsHost = selectedPds;
               showStep(4);
@@ -759,11 +760,23 @@
         return;
       }
 
+      if (blockIfCaptchaUnsupported(step3Error)) return;
       if (!checkPdsConsentBeforeProceeding()) return;
       wizardData.pdsHost = selectedPds;
       showStep(4);
       setupStep4();
     });
+
+    // A server that requires phone/captcha verification without a gatekeeper we can
+    // talk to cannot accept account creation from here (createAccount answers
+    // "Authentication Required"). Only relevant when no account exists there yet.
+    function blockIfCaptchaUnsupported(statusElement) {
+      if (wizardData.pdsCaptchaUnsupported && !wizardData.accountExistsOnTarget) {
+        showStatus(statusElement, i18n('captcha_unsupported'), 'error');
+        return true;
+      }
+      return false;
+    }
 
     // Check if account already exists on target PDS (replaces old bsky.social-only isMigrationIn check)
     function checkAccountExistsOnTarget(pdsUrl, callback) {
@@ -990,6 +1003,7 @@
         // PDS capabilities from describeServer
         wizardData.pdsCaptchaRequired = data.captcha_required || false;
         wizardData.pdsCaptchaSiteKey = data.captcha_site_key || null;
+        wizardData.pdsCaptchaUnsupported = data.captcha_unsupported || false;
         wizardData.pdsTosUrl = data.tos_url || null;
         wizardData.pdsPrivacyPolicyUrl = data.privacy_policy_url || null;
         wizardData.pdsIsEurosky = data.is_eurosky || false;
@@ -1288,6 +1302,10 @@
       document.getElementById('migration_old_refresh_token').value = wizardData.refreshToken || '';
       document.getElementById('migration_new_access_token').value = wizardData.newPdsAccessToken || '';
       document.getElementById('migration_new_refresh_token').value = wizardData.newPdsRefreshToken || '';
+      // The destination host must be the one the wizard verified — never whatever a
+      // password manager or browser autofill left in the (hidden) custom-host input.
+      // Seen in production: the form posted the user's handle as the destination.
+      if (wizardData.pdsHost) customPdsField.value = wizardData.pdsHost;
       document.getElementById('migration_target_pds_contact_email').value = wizardData.pdsContactEmail || '';
       document.getElementById('pds_tos_url').value = wizardData.pdsTosUrl || '';
       document.getElementById('pds_privacy_policy_url').value = wizardData.pdsPrivacyPolicyUrl || '';
@@ -1450,7 +1468,7 @@
 
         <div id="custom-pds-group" class="mb-3" style="display: none;">
           <%= f.label :new_pds_host, t('migrations.new.step3.custom_url_label'), class: "form-label" %>
-          <%= f.text_field :new_pds_host, id: "migration_new_pds_host", placeholder: t('migrations.new.step3.custom_url_placeholder'), autocomplete: "url", class: "form-control" %>
+          <%= f.text_field :new_pds_host, id: "migration_new_pds_host", placeholder: t('migrations.new.step3.custom_url_placeholder'), autocomplete: "off", class: "form-control" %>
           <div class="form-text"><%= t('migrations.new.step3.custom_url_help') %></div>
         </div>
 

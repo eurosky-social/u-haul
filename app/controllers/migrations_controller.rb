@@ -27,7 +27,7 @@
 #   GET  /migrations/:id/status (JSON only)
 
 class MigrationsController < ApplicationController
-  before_action :set_migration, only: [:show, :verify_email, :resend_verification, :submit_plc_token, :request_new_plc_token, :reauthenticate, :status, :download_backup, :retry, :export_recovery_data, :retry_failed_blobs, :confirm_delete, :request_cancellation, :confirm_cancellation]
+  before_action :set_migration, only: [:show, :verify_email, :resend_verification, :submit_plc_token, :request_new_plc_token, :reauthenticate, :reauthenticate_new_pds, :status, :download_backup, :retry, :export_recovery_data, :retry_failed_blobs, :confirm_delete, :request_cancellation, :confirm_cancellation]
   before_action :set_security_headers
 
   # GET /migrations/new
@@ -315,6 +315,10 @@ class MigrationsController < ApplicationController
       invite_code_required: invite_code_required,
       captcha_required: captcha_required,
       captcha_site_key: captcha_site_key,
+      # Phone/captcha verification required but no gatekeeper we can talk to:
+      # account creation from here is impossible (createAccount answers
+      # "Authentication Required"). The wizard blocks migration_out in that case.
+      captcha_unsupported: captcha_required && captcha_site_key.nil?,
       available_user_domains: available_user_domains,
       contact_email: contact_email,
       tos_url: tos_url,
@@ -472,6 +476,18 @@ class MigrationsController < ApplicationController
       @migration.email = sanitize_user_input(@migration.email) if @migration.email.present?
       @migration.new_pds_host = sanitize_user_input(@migration.new_pds_host) if @migration.new_pds_host.present?
 
+      # The destination host comes from a text input that browsers and password
+      # managers like to autofill with a handle or email address. Seen in
+      # production: the form posted the user's handle as new_pds_host, the
+      # account check ran against https://<handle>/ and reported "not found".
+      # Reject anything that cannot be a PDS host before doing any lookups.
+      host_error = target_host_error(@migration.new_pds_host, [@migration.old_handle, @migration.new_handle])
+      if host_error
+        @migration.errors.add(:base, host_error)
+        render :new, status: :unprocessable_entity
+        return
+      end
+
       # Store the target PDS contact email (fetched from describeServer during wizard)
       target_contact = params[:migration][:target_pds_contact_email]&.strip
       @migration.target_pds_contact_email = target_contact if target_contact.present?
@@ -563,10 +579,21 @@ class MigrationsController < ApplicationController
         @migration.progress_data['password_generated_at'] = Time.current.iso8601
       end
 
-      # Record whether the target PDS requires captcha (from describeServer phoneVerificationRequired)
-      if params[:pds_captcha_required] == '1'
-        @migration.progress_data['captcha_required'] = true
-        @migration.progress_data['captcha_site_key'] = params[:pds_captcha_site_key] if params[:pds_captcha_site_key].present?
+      # Record whether the target PDS requires captcha (from describeServer phoneVerificationRequired).
+      # Only relevant when we will call createAccount (migration_out): a returning
+      # migration never creates an account and must not be gated. Without a
+      # gatekeeper site key the widget cannot be rendered (the verification form
+      # would be impossible to pass) and createAccount fails anyway with
+      # "Authentication Required", so refuse early with a clear message.
+      if params[:pds_captcha_required] == '1' && @migration.migration_out?
+        if params[:pds_captcha_site_key].present?
+          @migration.progress_data['captcha_required'] = true
+          @migration.progress_data['captcha_site_key'] = params[:pds_captcha_site_key]
+        else
+          @migration.errors.add(:base, I18n.t('controllers.migrations.captcha_unsupported', pds: @migration.new_pds_host))
+          render :new, status: :unprocessable_entity
+          return
+        end
       end
 
       # Set the invite code if provided and enabled (Lockbox encrypts automatically)
@@ -659,8 +686,11 @@ class MigrationsController < ApplicationController
       return
     end
 
-    # Verify hCaptcha if the target PDS requires captcha (per describeServer phoneVerificationRequired)
-    if @migration.progress_data&.dig('captcha_required')
+    # Verify hCaptcha if the target PDS requires captcha (per describeServer phoneVerificationRequired).
+    # Only migration_out needs a gate code (createAccount), and the widget can only
+    # be shown when a site key is known. Older records may carry captcha_required
+    # for a returning migration or without a site key - never block those.
+    if @migration.migration_out? && @migration.progress_data&.dig('captcha_required') && @migration.progress_data&.dig('captcha_site_key').present?
       captcha_response = params[:'h-captcha-response']
       if captcha_response.blank?
         redirect_to migration_by_token_path(@migration.token),
@@ -963,6 +993,73 @@ class MigrationsController < ApplicationController
       redirect_to migration_by_token_path(@migration.token),
                   alert: I18n.t('controllers.migrations.reauth_error', error: e.message)
     end
+  end
+
+  # POST /migrate/:token/reauthenticate_new_pds
+  # Re-enter the password of the NEW account (migration_out only). Needed when
+  # the generated password stopped working - typically because the user reset
+  # the password on the new PDS while the migration was still pending, which
+  # also revokes the sessions we stored. Without this there was no way past
+  # "401 Unauthorized: Invalid identifier or password" at the PLC step.
+  def reauthenticate_new_pds
+    password = params[:password]&.strip
+
+    if password.blank?
+      redirect_to migration_by_token_path(@migration.token), alert: I18n.t('controllers.migrations.password_required_short')
+      return
+    end
+
+    plc_actually_submitted = @migration.progress_data&.dig('plc_operation_submitted_at').present?
+    allowed = @migration.migration_out? && (@migration.pending_plc? || (@migration.failed? && !plc_actually_submitted))
+    unless allowed
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: I18n.t('controllers.migrations.reauth_not_available')
+      return
+    end
+
+    response = HTTParty.post(
+      "#{@migration.new_pds_host}/xrpc/com.atproto.server.createSession",
+      headers: { 'Content-Type' => 'application/json' },
+      body: { identifier: @migration.did, password: password }.to_json,
+      timeout: 30
+    )
+
+    unless response.success?
+      error_body = JSON.parse(response.body) rescue {}
+      redirect_to migration_by_token_path(@migration.token),
+                  alert: I18n.t('controllers.migrations.new_pds_reauth_failed',
+                                pds: @migration.new_pds_host,
+                                error: error_body['message'] || 'Authentication failed')
+      return
+    end
+
+    session_data = JSON.parse(response.body)
+
+    # The password IS the new-account password here (unlike #reauthenticate,
+    # which takes the old PDS password and must not touch it).
+    @migration.password = password
+    @migration.new_access_token = session_data['accessJwt']
+    @migration.new_refresh_token = session_data['refreshJwt']
+    @migration.credentials_expires_at = [@migration.credentials_expires_at, 48.hours.from_now].compact.max
+    @migration.save!
+    Rails.logger.info("Re-authenticated with new PDS for migration #{@migration.token}")
+
+    if @migration.failed?
+      @migration.update!(status: 'pending_plc', last_error: nil, error_code: nil, current_job_attempt: 0)
+    end
+
+    if !@migration.plc_token_expired? && @migration.encrypted_plc_token.present?
+      UpdatePlcJob.perform_later(@migration.id)
+      notice_msg = I18n.t('controllers.migrations.reauth_success_plc_valid')
+    else
+      notice_msg = I18n.t('controllers.migrations.new_pds_reauth_success', pds: @migration.new_pds_host)
+    end
+
+    redirect_to migration_by_token_path(@migration.token), notice: notice_msg
+  rescue StandardError => e
+    Rails.logger.error("New-PDS re-authentication failed for migration #{@migration.token}: #{e.message}")
+    redirect_to migration_by_token_path(@migration.token),
+                alert: I18n.t('controllers.migrations.reauth_error', error: e.message)
   end
 
   # POST /migrate/:token/request_cancellation
@@ -1639,6 +1736,38 @@ class MigrationsController < ApplicationController
   rescue JSON::ParserError, HTTParty::Error, StandardError => e
     Rails.logger.error("Failed to check account existence: #{e.message}")
     raise "Unable to verify account existence: #{e.message}"
+  end
+
+  # Returns an error message when new_pds_host cannot be a PDS host, nil otherwise.
+  # Rejects email addresses and anything that is not hostname-shaped. A value
+  # equal to one of the user's handles (the classic autofill victim) is only
+  # accepted when a PDS actually answers there - self-hosters may legitimately
+  # serve their PDS from the handle domain.
+  def target_host_error(host, handles)
+    return nil if host.blank?
+
+    bare = host.to_s.sub(%r{\Ahttps?://}i, '').sub(%r{/.*\z}, '')
+    hostname = /\A[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(:\d{1,5})?\z/i
+
+    if bare.include?('@') || !bare.match?(hostname)
+      return I18n.t('controllers.migrations.invalid_target_host', host: host)
+    end
+
+    normalized_handles = handles.compact.map { |h| h.to_s.downcase }
+    if normalized_handles.include?(bare.downcase) && !pds_host_responds?("https://#{bare}")
+      return I18n.t('controllers.migrations.target_host_is_handle', host: bare)
+    end
+
+    nil
+  end
+
+  def pds_host_responds?(host)
+    response = HTTParty.get("#{host}/xrpc/com.atproto.server.describeServer", timeout: 10)
+    return false unless response.success?
+
+    (JSON.parse(response.body) rescue {}).key?('availableUserDomains')
+  rescue StandardError
+    false
   end
 
   # Custom error class for authentication failures

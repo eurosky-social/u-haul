@@ -47,10 +47,30 @@ require 'openssl'
 require 'base58'
 require 'minisky'
 
+# Bodyless POST for XRPC procedures that take no input
+# (com.atproto.identity.requestPlcOperationSignature, activateAccount,
+# deactivateAccount). Minisky's post_request always sends a body (an empty
+# string) with Content-Type and Content-Length headers; proxies such as
+# Cloudflare Tunnel re-frame that as Transfer-Encoding: chunked, and the
+# reference PDS then rejects the call with "A request body was provided when
+# none was expected" (bluesky-social/atproto#3267). Sending no body at all
+# avoids the framing entirely.
+module NoInputRequests
+  def post_request_without_body(method, auth: default_auth_mode, headers: nil)
+    check_access if auto_manage_tokens && auth == true
+
+    request_headers = authentication_header(auth).merge(headers || {})
+    request = Net::HTTP::Post.new(build_request_uri(method), request_headers)
+
+    handle_response(make_request(request))
+  end
+end
+
 # PdsClient: A programmatic minisky client that doesn't require a config file
 # Used for password-based authentication (new PDS only)
 class PdsClient
   include Minisky::Requests
+  include NoInputRequests
 
   attr_reader :host
   attr_accessor :config
@@ -72,6 +92,7 @@ end
 # Used for old PDS where we store tokens instead of the user's password
 class TokenPdsClient
   include Minisky::Requests
+  include NoInputRequests
 
   attr_reader :host
   attr_accessor :config
@@ -118,6 +139,7 @@ class GoatService
     end
   end
   class AccountExistsError < GoatError; end  # Raised when account already exists on target PDS
+  class EmailTakenError < GoatError; end  # Raised when the email is already registered on the target PDS (not retryable)
   class InvalidInviteCodeError < GoatError; end  # Raised when invite code is invalid, expired, or already used
   class TwoFactorRequiredError < GoatError; end  # Raised when PDS requires email-based 2FA token
   class HandleNotFoundError < GoatError; end  # Raised when the network answered and the handle does not exist
@@ -159,6 +181,11 @@ class GoatService
   ].freeze
 
   DEFAULT_TIMEOUT = 300 # 5 minutes
+
+  # Transient rejection of a no-input POST whose (empty) body got re-framed as
+  # chunked by a proxy such as Cloudflare Tunnel (bluesky-social/atproto#3267).
+  NO_INPUT_BODY_ERROR = /request body was provided when none was expected/i
+  NO_INPUT_ATTEMPTS = 4
 
   attr_reader :migration, :work_dir, :logger
 
@@ -313,12 +340,26 @@ class GoatService
           "Please start a new migration with a valid invite code."
       end
 
+      # Email already registered on the target: not retryable, the user has to
+      # free the address there or migrate with a different one.
+      if error_message.match?(/email already taken/i)
+        raise EmailTakenError, "The email address #{migration.email} is already used by another account on #{migration.new_pds_host}."
+      end
+
       # Check if this is an "AlreadyExists" error
       if error_message.include?("AlreadyExists") || error_message.include?("Repo already exists")
         # Check the status of the existing account
         account_status = check_account_exists_on_new_pds
 
-        if account_status[:exists] && account_status[:deactivated]
+        if account_status[:exists] && account_status[:deactivated] && migration.progress_data&.dig('account_created_at').present?
+          # This migration already created that account on an earlier run of
+          # CreateAccountJob (pipeline restarted). It is ours and was created
+          # with the password we hold, so carry on instead of failing it as an
+          # "orphaned account".
+          logger.warn("Deactivated account for #{migration.did} on #{migration.new_pds_host} was created by this " \
+                      "migration at #{migration.progress_data['account_created_at']}; treating as already created")
+          return
+        elsif account_status[:exists] && account_status[:deactivated]
           raise AccountExistsError, "Orphaned deactivated account exists on target PDS. " \
             "This is from a previous failed migration. To fix: delete the account from the PDS database " \
             "and retry the migration. DID: #{migration.did}, PDS: #{migration.new_pds_host}"
@@ -340,7 +381,7 @@ class GoatService
     end
 
     logger.info("Account created on new PDS (DID verified: #{parsed['did']})")
-  rescue AccountExistsError, InvalidInviteCodeError
+  rescue AccountExistsError, InvalidInviteCodeError, EmailTakenError
     raise
   rescue StandardError => e
     raise GoatError, "Failed to create account on new PDS: #{e.message}"
@@ -662,7 +703,11 @@ class GoatService
         raise RateLimitError.new("PDS rate limit exceeded while uploading blob: #{response.code} #{response.message}", retry_after: retry_after)
       end
 
-      raise NetworkError, "Failed to upload blob: #{response.code} #{response.message}"
+      # Include the start of the body: the PDS' error name/message is the only
+      # clue its operators get (a bare "500 Internal Server Error" is not).
+      body_snippet = response.body.to_s.gsub(/\s+/, ' ').strip[0, 200]
+      detail = body_snippet.empty? ? '' : " - #{body_snippet}"
+      raise NetworkError, "Failed to upload blob: #{response.code} #{response.message}#{detail}"
     end
 
     parsed = JSON.parse(response.body)
@@ -729,9 +774,10 @@ class GoatService
     # Must be logged in to old PDS
     login_old_pds
 
-    # Request PLC operation signature token via email
-    # Note: This endpoint doesn't accept a request body, so we don't pass the data parameter
-    old_pds_client.post_request('com.atproto.identity.requestPlcOperationSignature')
+    # Request PLC operation signature token via email.
+    # No-input procedure: send a bodyless POST and retry the transient
+    # body-framing rejection some proxies provoke (see post_no_input).
+    post_no_input(old_pds_client, 'com.atproto.identity.requestPlcOperationSignature')
 
     logger.info("PLC token requested (check email or logs)")
 
@@ -836,7 +882,7 @@ class GoatService
     login_new_pds
 
     # Activate account via PDS client (no request body expected)
-    new_pds_client.post_request('com.atproto.server.activateAccount')
+    post_no_input(new_pds_client, 'com.atproto.server.activateAccount')
 
     logger.info("Account activated on new PDS")
   rescue StandardError => e
@@ -850,7 +896,7 @@ class GoatService
     login_old_pds
 
     # Deactivate account via PDS client (no request body expected)
-    old_pds_client.post_request('com.atproto.server.deactivateAccount')
+    post_no_input(old_pds_client, 'com.atproto.server.deactivateAccount')
 
     logger.info("Account deactivated on old PDS")
   rescue StandardError => e
@@ -1043,6 +1089,26 @@ class GoatService
   # PDS client management using minisky
   # Returns a cached TokenPdsClient for the old (source) PDS
   # Uses stored refresh token to obtain fresh access tokens
+  # POST to an XRPC procedure that takes no input, without a request body,
+  # retrying the transient "A request body was provided when none was expected"
+  # 400 that proxies such as Cloudflare Tunnel provoke by re-framing bodyless
+  # requests as chunked. One unlucky framing must not fail a whole migration.
+  def post_no_input(client, method, attempts: NO_INPUT_ATTEMPTS)
+    attempt = 0
+    begin
+      attempt += 1
+      client.post_request_without_body(method)
+    rescue Minisky::ClientErrorResponse => e
+      if e.status == 400 && e.message.match?(NO_INPUT_BODY_ERROR) && attempt < attempts
+        wait = 2**attempt
+        logger.warn("#{method} rejected with a body-framing error (attempt #{attempt}/#{attempts}); retrying in #{wait}s")
+        sleep(wait)
+        retry
+      end
+      raise
+    end
+  end
+
   def old_pds_client
     @pds_clients ||= {}
     @pds_clients[:old_pds] ||= create_token_authenticated_client(

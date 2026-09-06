@@ -162,6 +162,7 @@ fi:
       confirm_email_access: "Vahvista, että sinulla on pääsy tähän sähköpostiosoitteeseen."
       # Step 3
       select_server: "Valitse palvelin tai syötä mukautetun palvelimen URL"
+      captcha_unsupported: "Tämä palvelin vaatii uusille tileille puhelin- tai captcha-vahvistuksen, jota ei voi suorittaa täältä. Luo tili ensin kyseiselle palvelimelle, palaa sitten takaisin ja valitse se uudelleen — ohjattu toiminto tunnistaa olemassa olevan tilin."
       checking_server: "Tarkistetaan palvelinta..."
       checking_requirements: "Tarkistetaan palvelimen vaatimuksia..."
       server_verified: "Palvelin vahvistettu!"
@@ -233,6 +234,10 @@ fi:
       files: "tiedostoa"
       data_transferred: "Tietoa siirretty"
       failed: "Epäonnistuneet"
+      retry_failed_blobs: "Yritä epäonnistuneita tiedostoja uudelleen"
+      missing_files_title: "Vielä siirtämättömät tiedostot: %{count}"
+      missing_files_detail: "Niitä yritetään automaattisesti uudelleen taustalla, myös siirron valmistumisen jälkeen, ja voit yrittää uudelleen nyt. Voit jatkaa siirtoa; kyseiset kuvat tai videot näkyvät rikkinäisinä, kunnes tiedostot ovat saapuneet."
+      missing_files_completed: "Siirtosi on valmis, mutta näitä tiedostoja siirretään yhä taustalla. Kyseiset kuvat tai videot näkyvät rikkinäisinä, kunnes ne ovat saapuneet. Voit myös yrittää uudelleen nyt. ÄLÄ vaihda uuden tilisi salasanaa ennen kuin olet saanut viimeisen sähköpostimme, jossa vahvistetaan kaikkien tiedostojen saapuneen — aikaisempi vaihto katkaisee siirron."
       preparing_blobs: "Valmistellaan <strong>%{count}</strong> blobin siirtoa..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ fi:
       # PLC pending — header status
       status_waiting_for_you: "Odottaa vastaustasi"
       progress_waiting_for_you: "Toimia vaaditaan — katso alta ↓"
+      last_updated: "Päivitetty viimeksi %{time}"
+      poll_error: "päivitys epäonnistui — tarkista yhteytesi"
+      refresh_now: "Päivitä nyt"
 
       # PLC pending — action required banner
       action_required_title: "Toimia vaaditaan — Tarkista sähköpostisi!"
@@ -344,6 +352,10 @@ fi:
       password_for: "Salasana käyttäjälle %{handle}"
       enter_password_placeholder: "Syötä tilisi salasana"
       reauth_button: "Tunnistaudu uudelleen ja jatka siirtoa"
+      new_pds_reauth_safe: "Siirtotietosi ovat turvassa — uudelle tilillesi kirjautumiseen tarvitaan vain nykyinen salasana."
+      new_pds_reauth_help: "Uuden tilisi salasana palvelimella <strong>%{pds}</strong> hylättiin. Näin käy, jos nollasit salasanan siellä siirron ollessa kesken. Jatka syöttämällä uuden tilisi nykyinen salasana."
+      new_pds_password_for: "Tilisi nykyinen salasana palvelimella %{pds}"
+      new_pds_reauth_button: "Tallenna salasana ja jatka siirtoa"
       plc_safe: "Siirtotietosi ovat turvassa — tarvitset vain uuden PLC-tokenin."
       plc_request_help: "Napsauta alla olevaa painiketta pyytääksesi uuden PLC-tokenin. Saat sen sähköpostitse palvelimelta <strong>%{pds}</strong>."
       request_plc_confirm: "Pyydä uusi PLC-token vanhalta PDS:ltäsi?"
@@ -460,6 +472,11 @@ fi:
       tokens_missing: "Tunnistautumistokenit puuttuvat. Palaa taaksepäin ja tunnistaudu uudelleen."
       account_not_found: "Tiliä ei löytynyt palvelimelta %{pds} DID-tunnuksellasi (%{did}). Palaa taaksepäin ja valitse toinen kohde-PDS tai aloita uusi siirto."
       account_verify_failed: "Tilin olemassaolon tarkistus palvelimella %{pds} epäonnistui: %{error}. Yritä uudelleen."
+      invalid_target_host: "\"%{host}\" ei ole kelvollinen palvelinosoite. Palaa vaiheeseen 3 ja valitse tai syötä kohdepalvelin (esimerkiksi pds.example.com)."
+      target_host_is_handle: "\"%{host}\" on käyttäjätunnuksesi (handle), ei palvelinosoite. Palaa vaiheeseen 3 ja valitse kohdepalvelin uudelleen."
+      captcha_unsupported: "%{pds} vaatii uusille tileille puhelin- tai captcha-vahvistuksen, jota tämä työkalu ei voi suorittaa. Luo tili ensin kyseiselle palvelimelle, aloita sitten uusi siirto ja valitse se uudelleen."
+      new_pds_reauth_failed: "Kirjautuminen tilillesi palvelimella %{pds} epäonnistui: %{error}. Tarkista salasana."
+      new_pds_reauth_success: "Tilisi salasana palvelimella %{pds} on tallennettu. Voit nyt lähettää PLC-vahvistuskoodisi tai pyytää uuden."
       target_tokens_missing: "Kohde-PDS:n tunnistautumistokenit puuttuvat. Palaa taaksepäin ja vahvista tunnistetietosi palvelimella %{pds}."
       reauth_not_available: "Uudelleentunnistautuminen ei ole käytettävissä tässä vaiheessa."
       reauth_failed: "Tunnistautuminen epäonnistui: %{error}. Tarkista salasanasi."
@@ -548,6 +565,9 @@ fi:
       hosting_miss: "Monet käyttäjät ohittavat tämän vaiheen — ilman oikeaa palveluntarjoajaa et pysty kirjautumaan sisään."
       change_password_heading: "VAIHDA SALASANASI"
       change_password_help: "Turvallisuutesi vuoksi suosittelemme vahvasti salasanan vaihtamista heti:"
+      missing_files_heading: "JOITAKIN TIEDOSTOJA SIIRRETÄÄN YHÄ"
+      missing_files_help: "Vielä siirtämättömien tiedostojen (kuvien tai videoiden) määrä: %{count}. Niitä yritetään automaattisesti uudelleen taustalla; kyseisissä julkaisuissa näkyy rikkinäisiä kuvia, kunnes ne ovat saapuneet. TÄRKEÄÄ: älä vaihda uuden tilisi salasanaa ennen kuin olet saanut viimeisen sähköpostimme, jossa vahvistetaan kaikkien tiedostojen saapuneen. Aikaisempi vaihto katkaisee siirron. Voit seurata edistymistä ja yrittää uudelleen tilasivulla:"
+      change_password_wait: "ÄLÄ vaihda tätä salasanaa vielä: joitakin tiedostojasi siirretään yhä taustalla, ja salasanan vaihtaminen katkaisisi siirron. Odota viimeistä sähköpostiamme, jossa vahvistetaan kaikkien tiedostojen saapuneen, ja vaihda salasana sen jälkeen."
       change_password_later: "Voit myös vaihtaa sen myöhemmin tilisi asetuksissa."
       whats_next: "MITÄ TAPAHTUU SEURAAVAKSI?"
       next1: "Tilisi on nyt aktiivinen palvelimella %{pds}"
@@ -559,6 +579,23 @@ fi:
       privacy2: "Kaikki salatut tunnistetiedot on poistettu turvallisesti palvelimiltamme"
       support: "Jos sinulla on kysymyksiä tai ongelmia, ota yhteyttä tukeen siirtotokenillasi:"
       email_footer: "Tämä sähköposti lähetettiin osoitteeseen %{email}, koska aloitit tilin siirron."
+
+    blobs_transfer_complete:
+      subject: "Kaikki tiedostot siirretty — siirtosi on täysin valmis (%{token})"
+      heading: "KAIKKI TIEDOSTOT OVAT SAAPUNEET"
+      intro: "Tiedostot, joita siirrettiin vielä siirtosi valmistuessa, ovat nyt kaikki saapuneet palvelimelle %{pds}. Julkaisusi, kuvasi ja videosi ovat täydelliset."
+      can_change_password: "Voit nyt turvallisesti vaihtaa tilisi salasanan palvelimella %{pds}."
+      status_page: "Siirron tilasivu (käytettävissä, kunnes siirtotietue poistetaan):"
+      support: "Jos tarvitset apua, ota yhteyttä tukeen ja ilmoita siirtotunnuksesi:"
+
+    blobs_transfer_incomplete:
+      subject: "Tiedostot, joita ei voitu siirtää: %{count} (%{token})"
+      heading: "JOITAKIN TIEDOSTOJA EI VOITU SIIRTÄÄ"
+      intro: "Niiden tiedostojen (kuvien tai videoiden) määrä, joita ei useista automaattisista yrityksistä huolimatta voitu siirtää palvelimelle %{pds}: %{count}. Kyseisissä julkaisuissa näkyy rikkinäisiä kuvia."
+      what_to_do: "Avaa tilasivu ja käytä toimintoa ”Yritä epäonnistuneita tiedostoja uudelleen”. Jokainen yritys käyttää varmuuskopiosi kopioita, joten mitään ei häviä. Saat viimeisen sähköpostin, kun kaikki on saapunut:"
+      keep_password: "ÄLÄ vaihda siihen asti tilisi salasanaa palvelimella %{pds} — vaihtaminen katkaisee siirron lopullisesti."
+      support: "Jos yritykset epäonnistuvat edelleen, ota yhteyttä tukeen ja ilmoita siirtotunnuksesi:"
+
 
     migration_failed:
       subject: "Siirto epäonnistui - Toimenpiteitä vaaditaan (%{token})"
@@ -604,6 +641,7 @@ fi:
       key_warning: "Säilytä tämä avain salasananhallinnassa tai muussa turvallisessa paikassa. Et VOI hakea sitä myöhemmin."
       next_step: "Siirry siirtosivulle syöttääksesi PLC-vahvistuskoodisi:"
       check_email: "Tarkista sähköpostistasi koodi vanhalta PDS-palveluntarjoajaltasi — se näyttää tältä: XXXXX-XXXXX"
+      no_password_reset: "Tärkeää: älä kirjaudu uudelle tilillesi palvelimella %{pds} äläkä nollaa siellä salasanaa ennen kuin tämä siirto on valmis. Salasanan nollaus mitätöi siirron käyttämät tunnukset, ja siirto epäonnistuu."
 
     plc_token_failed:
       subject: "Toimenpiteitä vaaditaan: Pyydä uusi PLC-vahvistuskoodi (%{token})"

@@ -79,4 +79,11 @@ jobs:
     - name: Push Images to Registry
       run: |
         docker push ${{ env.registry }}/${{ env.image }}:commit-${{ github.sha }}
-        docker push ${{ env.registry }}/${{ env.image }}:latest
+        # Only main moves the tag production pulls. Every branch push used to
+        # overwrite :latest, so a `docker compose pull` on the server after a
+        # feature-branch push would silently deploy that branch.
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          docker push ${{ env.registry }}/${{ env.image }}:latest
+        else
+          echo "Not main (${{ github.ref }}): skipping :latest push"
+        fi

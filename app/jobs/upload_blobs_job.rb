@@ -31,8 +31,16 @@ class UploadBlobsJob < ApplicationJob
 
   # Constants
   PARALLEL_BLOBS = 5
-  MAX_RETRIES = 3
+  # Per-blob attempts in the parallel pass (2, 4, 8, 16, 32 s of backoff). The
+  # target PDS has been seen rejecting ~70% of uploads with 500 for 40 minutes
+  # at a stretch; a few quick retries cannot ride that out on their own.
+  MAX_RETRIES = 5
   PROGRESS_UPDATE_INTERVAL = 10
+  # After the parallel pass, wait this long and retry the leftovers one by one.
+  SECOND_PASS_DELAY = 30
+  # Blobs still missing after the second pass are retried by RetryFailedBlobsJob
+  # this much later (the user is usually waiting for the PLC token anyway).
+  AUTO_RETRY_DELAY = 15.minutes
 
   # Retry configuration
   retry_on StandardError, wait: :polynomially_longer, attempts: 3
@@ -76,6 +84,10 @@ class UploadBlobsJob < ApplicationJob
     # Step 5: Advance to next stage
     migration.advance_to_pending_prefs!
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    logger.warn(e.message)
+
   rescue StandardError => e
     logger.error("Blob upload failed for migration #{migration&.id || migration_id}: #{e.message}")
     logger.error(e.backtrace.join("\n"))
@@ -96,11 +108,13 @@ class UploadBlobsJob < ApplicationJob
     total_blobs = blob_files.length
     uploaded_count = 0
     failed_cids = []
+    failed_files = []
     total_bytes = 0
 
     # Thread-safe counters and queue
     mutex = Mutex.new
     queue = Queue.new
+    aborted = false # set when the migration is cancelled/failed while uploading
 
     # Add all blob files to the queue
     blob_files.each_with_index { |blob_file, index| queue << [blob_file, index] }
@@ -114,6 +128,8 @@ class UploadBlobsJob < ApplicationJob
     threads = PARALLEL_BLOBS.times.map do
       Thread.new do
         loop do
+          break if aborted
+
           # Get next blob from queue (non-blocking)
           begin
             blob_file, index = queue.pop(true)
@@ -145,6 +161,7 @@ class UploadBlobsJob < ApplicationJob
               mutex.synchronize do
                 ActiveRecord::Base.connection_pool.with_connection do
                   update_upload_progress(migration, uploaded_count, total_blobs, total_bytes)
+                  aborted = true if migration.terminal_in_db?
                 end
               end
             end
@@ -153,6 +170,7 @@ class UploadBlobsJob < ApplicationJob
             logger.error("Failed to upload blob #{cid}: #{e.message}")
             mutex.synchronize do
               failed_cids << cid
+              failed_files << blob_file
             end
           end
         end
@@ -165,6 +183,18 @@ class UploadBlobsJob < ApplicationJob
     # Final progress update
     update_upload_progress(migration, uploaded_count, total_blobs, total_bytes)
 
+    raise Migration::Aborted, "Migration #{migration.token} was cancelled or failed during blob upload; stopping" if aborted
+
+    # Second, sequential pass for whatever the parallel pass could not upload
+    if failed_files.any?
+      recovered_files = retry_failed_uploads(migration, goat, failed_files)
+      uploaded_count += recovered_files.length
+      total_bytes += recovered_files.sum { |f| File.size(f) }
+      failed_files -= recovered_files
+      failed_cids = failed_files.map { |f| File.basename(f) }
+      update_upload_progress(migration, uploaded_count, total_blobs, total_bytes)
+    end
+
     # Log summary
     logger.info("Upload complete: #{uploaded_count}/#{total_blobs} successful")
     logger.info("Total data uploaded: #{format_bytes(total_bytes)}")
@@ -172,10 +202,21 @@ class UploadBlobsJob < ApplicationJob
     if failed_cids.any?
       logger.warn("Failed to upload #{failed_cids.length} blobs: #{failed_cids.join(', ')}")
 
-      # Save failed uploads to migration metadata
-      migration.progress_data ||= {}
-      migration.progress_data['failed_uploads'] = failed_cids
-      migration.save!
+      # Save failed uploads to migration metadata. 'failed_blobs' is the key the
+      # status page, the retry button and RetryFailedBlobsJob read (the import
+      # path always wrote it; this path only wrote 'failed_uploads', so failures
+      # here were invisible and migrations completed with missing media).
+      migration.merge_progress!(
+        'failed_uploads' => failed_cids,
+        'failed_blobs' => failed_cids,
+        'blobs_auto_retry_scheduled_at' => Time.current.iso8601
+      )
+
+      # Automatic retry once the PDS has had time to recover (first of up to
+      # three background passes, see RetryFailedBlobsJob::AUTO_RETRY_DELAYS);
+      # the user can also trigger one from the status page at any time.
+      RetryFailedBlobsJob.set(wait: AUTO_RETRY_DELAY).perform_later(migration.id, failed_cids, 1)
+      logger.info("Scheduled automatic retry of #{failed_cids.length} blobs in #{AUTO_RETRY_DELAY.inspect}")
 
       # Write failed uploads manifest for visibility
       if migration.downloaded_data_path.present?
@@ -209,9 +250,9 @@ class UploadBlobsJob < ApplicationJob
     goat.upload_blob(blob_file)
   rescue GoatService::RateLimitError => e
     if attempt < MAX_RETRIES
-      backoff = 2 ** (attempt + 2) # 8s, 16s, 32s
+      backoff = 2 ** (attempt + 2) # 8s, 16s, 32s, 64s, 128s
       logger.warn("Rate limit hit uploading blob (attempt #{attempt}/#{MAX_RETRIES}): #{blob_file} - retrying in #{backoff}s")
-      sleep(backoff)
+      pause(backoff)
       upload_blob_with_retry(goat, blob_file, attempt + 1)
     else
       logger.error("Blob upload failed after #{MAX_RETRIES} rate-limit retries: #{blob_file}")
@@ -220,7 +261,7 @@ class UploadBlobsJob < ApplicationJob
   rescue GoatService::NetworkError, GoatService::TimeoutError => e
     if attempt < MAX_RETRIES
       logger.warn("Blob upload failed (attempt #{attempt}/#{MAX_RETRIES}): #{blob_file} - #{e.message}")
-      sleep(2 ** attempt) # 2s, 4s, 8s
+      pause(2 ** attempt) # 2s, 4s, 8s, 16s, 32s
       upload_blob_with_retry(goat, blob_file, attempt + 1)
     else
       logger.error("Blob upload failed after #{MAX_RETRIES} attempts: #{blob_file}")
@@ -228,14 +269,49 @@ class UploadBlobsJob < ApplicationJob
     end
   end
 
+  # Sequential retry of the blobs the parallel pass could not upload, after a
+  # breather for the target PDS. Returns the files that succeeded this time.
+  def retry_failed_uploads(migration, goat, failed_files)
+    logger.warn("#{failed_files.length} blobs failed in the parallel pass; retrying one at a time after #{SECOND_PASS_DELAY}s")
+    pause(SECOND_PASS_DELAY)
+
+    recovered = []
+    failed_files.each do |blob_file|
+      break if migration.terminal_in_db?
+
+      begin
+        upload_blob_with_retry(goat, blob_file)
+        recovered << blob_file
+        logger.info("Recovered blob on second pass: #{File.basename(blob_file)}")
+      rescue StandardError => e
+        logger.error("Second pass failed for blob #{File.basename(blob_file)}: #{e.message}")
+      end
+    end
+
+    logger.info("Second pass recovered #{recovered.length}/#{failed_files.length} blobs")
+    recovered
+  end
+
+  # All waits go through here so specs can stub them
+  def pause(seconds)
+    sleep(seconds)
+  end
+
   # Update upload progress in database
   def update_upload_progress(migration, uploaded, total, bytes_uploaded)
-    migration.progress_data ||= {}
-    migration.progress_data['blobs_uploaded'] = uploaded
-    migration.progress_data['blobs_total'] = total
-    migration.progress_data['bytes_uploaded'] = bytes_uploaded
-    migration.progress_data['last_progress_update'] = Time.current.iso8601
-    migration.save!
+    # Write the upload-specific keys AND the generic keys the status page reads
+    # (Migration#blob_upload_percentage, MigrationsController#calculate_blob_statistics
+    # use blobs_completed / bytes_transferred). Without them the progress bar sat
+    # at 40% and the counters at 0 for the whole upload.
+    # Atomic JSONB merge: never writes back a stale copy of progress_data.
+    migration.merge_progress!(
+      'blobs_uploaded' => uploaded,
+      'blobs_completed' => uploaded,
+      'blobs_total' => total,
+      'bytes_uploaded' => bytes_uploaded,
+      'bytes_transferred' => bytes_uploaded,
+      'last_progress_update' => Time.current.iso8601
+    )
 
     logger.debug("Upload progress: #{uploaded}/#{total} blobs (#{format_bytes(bytes_uploaded)})")
   end

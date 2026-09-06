@@ -136,6 +136,8 @@ module MigrationErrorHelper
       disk_space_context(migration)
     when :invite_code
       invite_code_context(migration)
+    when :email_taken
+      email_taken_context(migration)
     when :cancelled
       cancelled_context(migration)
     when :critical_plc
@@ -230,6 +232,39 @@ module MigrationErrorHelper
     }
   end
 
+  def self.email_taken_context(migration)
+    contact_email = migration.target_pds_contact_email.presence || ENV.fetch('SUPPORT_EMAIL', 'support@example.com')
+
+    {
+      severity: :error,
+      icon: "📧",
+      title: "Email Address Already Registered on Target PDS",
+      what_happened: "#{migration.new_pds_host} already has an account registered with #{migration.email}, " \
+                     "so a new account for your DID could not be created there. " \
+                     "Your account on #{migration.old_pds_host} is untouched.",
+      current_status: "Migration stopped — no changes were made to your identity",
+      what_to_do: [
+        "If that account is yours, log in to it on #{migration.new_pds_host}, change its email address, then start a new migration",
+        "Or start a new migration using a different email address",
+        "If you don't recognise the account, contact the PDS provider: #{contact_email}"
+      ],
+      show_retry_button: false,
+      show_retry_info: false,
+      show_contact_support: true,
+      support_email: contact_email,
+      migration_token: migration.token,
+      did: migration.did
+    }
+  end
+
+  # The new-account password (migration_out) was rejected by the target PDS,
+  # typically because the user reset it there while the migration was pending
+  # (which also revokes the sessions we stored).
+  def self.new_pds_login_failed?(migration)
+    migration.migration_out? &&
+      migration.last_error.to_s.match?(/login to new PDS|new PDS password|Invalid identifier or password/i)
+  end
+
   def self.account_exists_context(migration)
     contact_email = migration.target_pds_contact_email.presence || ENV.fetch('SUPPORT_EMAIL', 'support@example.com')
 
@@ -297,6 +332,7 @@ module MigrationErrorHelper
       show_retry_button: false,
       show_retry_info: false,
       show_request_new_plc_token: true,
+      show_new_pds_reauth_form: new_pds_login_failed?(migration),
       help_link: "/docs/troubleshooting#plc-token-expiration",
       old_pds_host: migration.old_pds_host
     }
@@ -318,6 +354,7 @@ module MigrationErrorHelper
       show_retry_button: false,
       show_retry_info: false,
       show_reauth_form: true,
+      show_new_pds_reauth_form: new_pds_login_failed?(migration),
       help_link: "/docs/troubleshooting#credential-expiration",
       old_pds_host: migration.old_pds_host
     }
