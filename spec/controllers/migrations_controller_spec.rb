@@ -133,10 +133,10 @@ RSpec.describe MigrationsController, type: :controller do
       end
     end
 
-    context "when handle resolution fails" do
+    context "when the handle does not exist" do
       before do
         allow(GoatService).to receive(:resolve_handle).and_raise(
-          GoatService::NetworkError, 'Could not resolve handle'
+          GoatService::HandleNotFoundError, 'Could not resolve handle'
         )
       end
 
@@ -150,16 +150,41 @@ RSpec.describe MigrationsController, type: :controller do
         post :create, params: { migration: valid_attributes }
 
         expect(assigns(:migration).errors[:old_handle]).to be_present
-        expect(assigns(:migration).errors[:old_handle]).to include(/could not be resolved/)
+        expect(assigns(:migration).errors[:old_handle])
+          .to include(I18n.t('controllers.migrations.resolve_failed'))
       end
 
       it "re-renders new template" do
         post :create, params: { migration: valid_attributes }
         expect(response).to render_template(:new)
       end
+    end
 
-      it "logs the error" do
-        expect(Rails.logger).to receive(:error).with(/Failed to resolve handle/)
+    # A resolver outage is not a bad handle. Blaming :old_handle here is what
+    # sent users hunting for a typo throughout the 2026-08-21 DNS outage.
+    context "when handle resolution is unavailable" do
+      before do
+        allow(GoatService).to receive(:resolve_handle).and_raise(
+          GoatService::NetworkError, 'DNS resolution failed'
+        )
+      end
+
+      it "does not create a migration" do
+        expect {
+          post :create, params: { migration: valid_attributes }
+        }.not_to change(Migration, :count)
+      end
+
+      it "blames the service rather than the handle" do
+        post :create, params: { migration: valid_attributes }
+
+        expect(assigns(:migration).errors[:old_handle]).to be_empty
+        expect(assigns(:migration).errors[:base])
+          .to include(I18n.t('controllers.migrations.resolve_unavailable'))
+      end
+
+      it "logs it as an availability problem" do
+        expect(Rails.logger).to receive(:error).with(/Handle resolution unavailable/)
         post :create, params: { migration: valid_attributes }
       end
     end
@@ -412,6 +437,48 @@ RSpec.describe MigrationsController, type: :controller do
       expect {
         get :show, params: { id: 'nonexistent' }
       }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+  end
+
+  describe "POST #lookup_handle" do
+    let(:lookup_params) { { handle: 'alice.example.com', password: 'secret-password' } }
+
+    before do
+      allow(GoatService).to receive(:detect_handle_type).and_return(
+        { type: 'pds_hosted', verified_via: 'pds_api', can_preserve: false, reason: nil }
+      )
+    end
+
+    context "when the handle does not exist" do
+      before do
+        allow(GoatService).to receive(:resolve_handle)
+          .and_raise(GoatService::HandleNotFoundError, 'no such handle')
+      end
+
+      it "answers 404 and tells the user to check the handle" do
+        post :lookup_handle, params: lookup_params
+
+        expect(response).to have_http_status(:not_found)
+        expect(JSON.parse(response.body)['error'])
+          .to eq(I18n.t('controllers.migrations.resolve_failed'))
+      end
+    end
+
+    context "when resolution is unavailable" do
+      before do
+        allow(GoatService).to receive(:resolve_handle)
+          .and_raise(GoatService::NetworkError, 'DNS resolution failed')
+      end
+
+      # 404 "check that the handle is correct" was the user-facing face of the
+      # 2026-08-21 outage: an infrastructure fault reported as user error.
+      it "answers 503 and owns the failure" do
+        post :lookup_handle, params: lookup_params
+
+        expect(response).to have_http_status(:service_unavailable)
+        expect(JSON.parse(response.body)['error'])
+          .to eq(I18n.t('controllers.migrations.resolve_unavailable'))
+      end
     end
   end
 end

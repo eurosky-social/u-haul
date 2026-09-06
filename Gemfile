@@ -54,5 +54,10 @@ group :test do
 
   # Mocking and stubbing
   gem "mocha", "~> 2.1"
+
+  # assigns / render_template in controller specs. Without it every example in
+  # spec/controllers/migrations_controller_spec.rb errors with
+  # "assigns has been extracted to a gem".
+  gem "rails-controller-testing", "~> 1.0"
 end
 

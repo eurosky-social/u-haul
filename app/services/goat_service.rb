@@ -22,7 +22,8 @@
 # Error Handling:
 #   All methods raise specific exceptions on failure:
 #   - AuthenticationError: Login or session failures
-#   - NetworkError: HTTP/API communication failures
+#   - NetworkError: HTTP/API communication failures (could not reach the network)
+#   - HandleNotFoundError: the network answered and the handle does not exist
 #   - RateLimitError: PDS rate-limiting (HTTP 429)
 #   - TimeoutError: Operations exceeding timeout limits
 #   - GoatError: General operation failures
@@ -41,6 +42,8 @@
 
 require 'open3'
 require 'net/http'
+require 'resolv'
+require 'openssl'
 require 'base58'
 require 'minisky'
 
@@ -117,6 +120,43 @@ class GoatService
   class AccountExistsError < GoatError; end  # Raised when account already exists on target PDS
   class InvalidInviteCodeError < GoatError; end  # Raised when invite code is invalid, expired, or already used
   class TwoFactorRequiredError < GoatError; end  # Raised when PDS requires email-based 2FA token
+  class HandleNotFoundError < GoatError; end  # Raised when the network answered and the handle does not exist
+
+  # Wall-clock budget for resolving a handle all the way to a PDS host.
+  #
+  # Every strategy carries its own timeout and, before this budget existed, they
+  # simply stacked: one lookup_handle could spend ~49s walking DNS, well-known,
+  # bsky.social, bsky.network and finally plc.directory, waiting out each timeout
+  # in turn, before telling the user their handle was wrong.
+  HANDLE_RESOLUTION_BUDGET = 10 # seconds
+
+  # Ceiling for any single attempt; whatever is left of the budget shrinks it.
+  HANDLE_RESOLUTION_ATTEMPT_TIMEOUT = 4 # seconds
+
+  # Below this, an attempt is guaranteed to time out and would be miscounted as
+  # a network failure - turning "handle does not exist" into "we are degraded".
+  MIN_ATTEMPT_TIMEOUT = 0.25 # seconds
+
+  # Public PDS instances tried as a last resort when resolving a handle.
+  PUBLIC_PDS_HOSTS = ['https://bsky.social', 'https://bsky.network'].freeze
+
+  # Generous ceiling for a DID read from a remote well-known endpoint.
+  MAX_DID_LENGTH = 256
+
+  # Failures that mean "we could not reach the network", as opposed to "the
+  # network answered and the handle does not exist". Net::OpenTimeout and
+  # Net::ReadTimeout are both Timeout::Error, so they are covered.
+  NETWORK_ERRORS = [
+    SocketError,
+    Resolv::ResolvError,
+    Errno::ECONNREFUSED,
+    Errno::EHOSTUNREACH,
+    Errno::ENETUNREACH,
+    Errno::ETIMEDOUT,
+    Timeout::Error,
+    HTTParty::Error,
+    OpenSSL::SSL::SSLError
+  ].freeze
 
   DEFAULT_TIMEOUT = 300 # 5 minutes
 
@@ -1115,97 +1155,186 @@ class GoatService
       .downcase
   end
 
-  # Resolve a handle to a DID
-  # Tries multiple resolution methods in order:
-  # 1. DNS TXT record (_atproto.handle)
-  # 2. HTTPS well-known endpoint (/.well-known/atproto-did)
-  # 3. PDS resolution endpoint
-  def self.resolve_handle_to_did(handle)
+  # Resolve a handle to a DID.
+  #
+  # Strategies are tried in the order the AT Protocol identity spec prefers:
+  #   1. DNS TXT record at _atproto.<handle>
+  #   2. HTTPS well-known endpoint at https://<handle>/.well-known/atproto-did
+  #   3. A PDS inferred from the handle itself (user.pds.example.com)
+  #   4. Well-known public PDS instances
+  #
+  # Raises HandleNotFoundError when the network answered and no strategy found a
+  # DID, and NetworkError when we could not reach the network to ask. Callers
+  # depend on that distinction to decide whether the user or the service is at
+  # fault, so keep the two apart.
+  def self.resolve_handle_to_did(handle, deadline: nil)
     handle = clean_handle(handle)
+    deadline ||= resolution_deadline
     Rails.logger.info("Resolving handle to DID: #{handle}")
 
-    # Strategy 1: Try DNS-based resolution (most reliable for custom domains)
+    failures = []
+
+    did = resolve_did_via_dns(handle, deadline, failures)
+    return did if did.present?
+
+    did = resolve_did_via_well_known(handle, deadline, failures)
+    return did if did.present?
+
+    did = resolve_did_via_inferred_pds(handle, deadline, failures)
+    return did if did.present?
+
+    did = resolve_did_via_public_pds(handle, deadline, failures)
+    return did if did.present?
+
+    raise NetworkError, "Handle resolution unavailable for #{handle}: #{failures.join('; ')}" if failures.any?
+
+    raise HandleNotFoundError, "Could not resolve handle #{handle} to DID"
+  end
+
+  # Strategy 1 - DNS TXT record at _atproto.<handle>.
+  def self.resolve_did_via_dns(handle, deadline, failures)
+    timeout = attempt_timeout(deadline)
+    return nil if timeout.zero?
+
+    txt_record = "_atproto.#{handle}"
+    Rails.logger.debug("Attempting DNS TXT lookup for #{txt_record}")
+
+    resolver = Resolv::DNS.new
+    # Resolv's default retry ladder (5s, 10s, 20s, 40s) can outlive the entire
+    # budget against a resolver that is present but answering nothing - which is
+    # exactly what a stale container resolv.conf looks like.
+    resolver.timeouts = [timeout]
+
     begin
-      # Extract the domain from the handle for DNS TXT record lookup
-      domain = handle.strip.downcase
-      txt_record = "_atproto.#{domain}"
-
-      Rails.logger.debug("Attempting DNS TXT lookup for #{txt_record}")
-      require 'resolv'
-      resolver = Resolv::DNS.new
-
-      txt_records = resolver.getresources(txt_record, Resolv::DNS::Resource::IN::TXT)
-      txt_records.each do |record|
+      resolver.getresources(txt_record, Resolv::DNS::Resource::IN::TXT).each do |record|
         record.strings.each do |string|
-          if string.start_with?('did=')
-            did = string.sub('did=', '')
-            Rails.logger.info("Resolved handle #{handle} to DID via DNS: #{did}")
-            return did
-          end
-        end
-      end
-    rescue StandardError => e
-      Rails.logger.debug("DNS resolution failed for #{handle}: #{e.message}")
-      # Continue to next strategy
-    end
+          next unless string.start_with?('did=')
 
-    # Strategy 2: Try resolution via inferred PDS (for handles like user.pds.example.com)
-    if handle.include?('.pds.')
-      begin
-        # Extract potential PDS host from handle (e.g., euro11-06.pds.local.theeverythingapp.de -> pds.local.theeverythingapp.de)
-        parts = handle.split('.')
-        if parts.length >= 3
-          # Reconstruct PDS host from domain parts
-          pds_host = "https://#{parts[1..-1].join('.')}"
-          Rails.logger.debug("Attempting resolution via inferred PDS: #{pds_host}")
-
-          url = "#{pds_host}/xrpc/com.atproto.identity.resolveHandle"
-          response = HTTParty.get(url, query: { handle: handle }, timeout: 10)
-
-          if response.success?
-            parsed = JSON.parse(response.body)
-            did = parsed['did']
-            Rails.logger.info("Resolved handle #{handle} to DID via inferred PDS #{pds_host}: #{did}")
-            return did
-          end
-        end
-      rescue StandardError => e
-        Rails.logger.debug("Inferred PDS resolution failed: #{e.message}")
-        # Continue to next strategy
-      end
-    end
-
-    # Strategy 3: Try resolution via common PDS instances (for bsky.social handles)
-    common_pds_hosts = ['https://bsky.social', 'https://bsky.network']
-
-    common_pds_hosts.each do |pds_host|
-      begin
-        url = "#{pds_host}/xrpc/com.atproto.identity.resolveHandle"
-        response = HTTParty.get(url, query: { handle: handle }, timeout: 10)
-
-        if response.success?
-          parsed = JSON.parse(response.body)
-          did = parsed['did']
-          Rails.logger.info("Resolved handle #{handle} to DID via #{pds_host}: #{did}")
+          did = string.sub('did=', '')
+          Rails.logger.info("Resolved handle #{handle} to DID via DNS: #{did}")
           return did
         end
-      rescue StandardError => e
-        Rails.logger.debug("Failed to resolve via #{pds_host}: #{e.message}")
-        # Continue to next PDS
       end
+      nil
+    ensure
+      resolver.close
     end
+  rescue StandardError => e
+    record_resolution_failure(e, failures, "DNS TXT lookup for #{handle}")
+    nil
+  end
 
-    raise NetworkError, "Could not resolve handle #{handle} to DID"
+  # Strategy 2 - HTTPS well-known endpoint.
+  #
+  # This method's contract has always documented this strategy, but until now it
+  # was never implemented: a handle on a PDS other than bsky.social with no DNS
+  # TXT record could only resolve if bsky.social happened to answer for it.
+  def self.resolve_did_via_well_known(handle, deadline, failures)
+    timeout = attempt_timeout(deadline)
+    return nil if timeout.zero?
+
+    url = "https://#{handle}/.well-known/atproto-did"
+    Rails.logger.debug("Attempting HTTP well-known lookup at #{url}")
+
+    response = HTTParty.get(url, timeout: timeout, follow_redirects: true)
+    return nil unless response.success?
+
+    # Remote-controlled body: accept only something that actually looks like a DID.
+    did = response.body.to_s.strip
+    return nil unless did.start_with?('did:') && did.length <= MAX_DID_LENGTH
+
+    Rails.logger.info("Resolved handle #{handle} to DID via well-known: #{did}")
+    did
+  rescue StandardError => e
+    record_resolution_failure(e, failures, "well-known lookup for #{handle}")
+    nil
+  end
+
+  # Strategy 3 - a PDS inferred from the handle (e.g. euro11.pds.example.com).
+  def self.resolve_did_via_inferred_pds(handle, deadline, failures)
+    return nil unless handle.include?('.pds.')
+
+    parts = handle.split('.')
+    return nil if parts.length < 3
+
+    resolve_did_via_pds_host(handle, "https://#{parts[1..-1].join('.')}", deadline, failures)
+  end
+
+  # Strategy 4 - well-known public PDS instances.
+  def self.resolve_did_via_public_pds(handle, deadline, failures)
+    PUBLIC_PDS_HOSTS.each do |pds_host|
+      did = resolve_did_via_pds_host(handle, pds_host, deadline, failures)
+      return did if did.present?
+    end
+    nil
+  end
+
+  # com.atproto.identity.resolveHandle against a single PDS.
+  def self.resolve_did_via_pds_host(handle, pds_host, deadline, failures)
+    timeout = attempt_timeout(deadline)
+    return nil if timeout.zero?
+
+    url = "#{pds_host}/xrpc/com.atproto.identity.resolveHandle"
+    response = HTTParty.get(url, query: { handle: handle }, timeout: timeout)
+    # A non-success response is a real answer: this PDS does not know the handle.
+    # Only a raised exception counts as "we could not ask".
+    return nil unless response.success?
+
+    did = JSON.parse(response.body)['did']
+    return nil if did.blank?
+
+    Rails.logger.info("Resolved handle #{handle} to DID via #{pds_host}: #{did}")
+    did
+  rescue StandardError => e
+    record_resolution_failure(e, failures, "resolveHandle via #{pds_host}")
+    nil
+  end
+
+  # Monotonic, so a wall-clock adjustment cannot stretch or collapse the budget
+  # part-way through a resolution.
+  def self.resolution_deadline(budget = HANDLE_RESOLUTION_BUDGET)
+    Process.clock_gettime(Process::CLOCK_MONOTONIC) + budget
+  end
+
+  # Seconds a single attempt may take: whatever is left of the budget, capped.
+  # Zero means the budget is spent and the caller should stop.
+  def self.attempt_timeout(deadline)
+    remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    return 0 if remaining < MIN_ATTEMPT_TIMEOUT
+
+    [remaining, HANDLE_RESOLUTION_ATTEMPT_TIMEOUT].min
+  end
+
+  # Record a failed strategy, distinguishing "could not reach the network" from
+  # "the network answered, this just isn't it".
+  def self.record_resolution_failure(error, failures, context)
+    if network_error?(error)
+      Rails.logger.warn("#{context} failed (network): #{error.class}: #{error.message}")
+      failures << "#{context} (#{error.class})"
+    else
+      Rails.logger.debug("#{context} failed: #{error.class}: #{error.message}")
+    end
+  end
+
+  def self.network_error?(error)
+    NETWORK_ERRORS.any? { |klass| error.is_a?(klass) }
   end
 
   # Get the PDS host for a given DID by querying the PLC directory
-  def self.resolve_did_to_pds(did)
+  def self.resolve_did_to_pds(did, deadline: nil)
     Rails.logger.info("Resolving DID to PDS: #{did}")
 
     plc_host = ENV.fetch('ATP_PLC_HOST', 'https://plc.directory')
     url = "#{plc_host}/#{did}"
 
-    response = HTTParty.get(url, timeout: 10)
+    timeout = deadline ? attempt_timeout(deadline) : HANDLE_RESOLUTION_ATTEMPT_TIMEOUT
+    raise NetworkError, "Ran out of time resolving #{did} to a PDS" if timeout.zero?
+
+    response = HTTParty.get(url, timeout: timeout)
+
+    # PLC answered that it has never heard of this DID - that is a real answer,
+    # not a failure to reach the network.
+    raise HandleNotFoundError, "DID #{did} is not registered in PLC" if response.code == 404
 
     unless response.success?
       raise NetworkError, "Failed to fetch DID document from PLC: #{response.code} #{response.message}"
@@ -1224,6 +1353,10 @@ class GoatService
     Rails.logger.info("Resolved DID #{did} to PDS: #{pds_host}")
 
     pds_host
+  rescue GoatError
+    # Already classified above - re-raising as NetworkError would hide a
+    # HandleNotFoundError behind a "network is down" message.
+    raise
   rescue JSON::ParserError => e
     raise GoatError, "Invalid JSON in PLC response: #{e.message}"
   rescue StandardError => e
@@ -1375,8 +1508,10 @@ class GoatService
   # Convenience method to resolve handle directly to PDS host
   # Returns a hash with { did: '...', pds_host: '...' }
   def self.resolve_handle(handle)
-    did = resolve_handle_to_did(handle)
-    pds_host = resolve_did_to_pds(did)
+    # One budget for the whole handle -> DID -> PDS chain, not one per leg.
+    deadline = resolution_deadline
+    did = resolve_handle_to_did(handle, deadline: deadline)
+    pds_host = resolve_did_to_pds(did, deadline: deadline)
 
     {
       did: did,
