@@ -1,4 +1,11 @@
 class Migration < ApplicationRecord
+  # Raised by advance_with_job! / abort_if_terminal! when a job discovers that
+  # the migration was cancelled, failed, completed or deleted underneath it.
+  # Jobs rescue this first and stop: no retry, no further writes to the row.
+  class Aborted < StandardError; end
+
+  TERMINAL_STATUSES = %w[completed failed].freeze
+
   # Module to override Lockbox getters with expiration checks
   # This must be prepended AFTER Lockbox defines its methods
   module ExpirationChecks
@@ -196,6 +203,36 @@ class Migration < ApplicationRecord
     MigrationMailer.reauthentication_required(self).deliver_later rescue nil if should_send_reauth
   end
 
+  # True when the row is failed/completed in the database. Reads only the status
+  # column so unsaved in-memory changes on this object are kept. A row that
+  # cannot be seen is NOT treated as terminal: jobs start with Migration.find,
+  # so a deleted record never gets this far, whereas a worker thread on its own
+  # connection legitimately cannot see a row inside a transactional test.
+  def terminal_in_db?
+    db_status = self.class.where(id: id).pick(:status)
+    TERMINAL_STATUSES.include?(db_status)
+  end
+
+  # Long-running jobs call this between batches so a cancellation stops them.
+  def abort_if_terminal!
+    return unless terminal_in_db?
+
+    raise Aborted, "Migration #{token} was cancelled, failed or completed; stopping job"
+  end
+
+  # Merge keys into progress_data with one atomic UPDATE. Touches nothing but
+  # progress_data/updated_at and keeps keys written by other processes (for
+  # example cancelled_at), unlike assigning the whole hash and calling save!.
+  # The in-memory copy is updated too so a later save! does not drop the keys.
+  def merge_progress!(patch)
+    patch = patch.stringify_keys
+    self.class.where(id: id).update_all([
+      "progress_data = COALESCE(progress_data, '{}'::jsonb) || ?::jsonb, updated_at = ?",
+      patch.to_json, Time.current
+    ])
+    self.progress_data = (progress_data || {}).merge(patch)
+  end
+
   # Whether this migration can be cancelled by the user.
   # Cancellation is allowed before the PLC operation is submitted (point of no return).
   # Once the user submits the PLC token and UpdatePlcJob is running, cancellation
@@ -282,7 +319,7 @@ class Migration < ApplicationRecord
   def estimated_time_remaining
     return nil unless pending_blobs?
 
-    completed = progress_data['blobs_completed'].to_i
+    completed = (progress_data['blobs_completed'] || progress_data['blobs_uploaded']).to_i
     total = progress_data['blobs_total'].to_i
     started_at = progress_data['blobs_started_at']
 
@@ -476,8 +513,21 @@ class Migration < ApplicationRecord
     if email_verification_token.present? && email_verification_token.upcase == code.to_s.strip.upcase
       update!(email_verified_at: Time.current, email_verification_token: nil)
       Rails.logger.info("Email verified for migration #{self.token}")
-      # Now actually start the migration
-      schedule_first_job
+      if pending_account?
+        # Normal case: nothing has run yet
+        schedule_first_job
+      elsif completed? || pending_activation? || progress_data&.dig('plc_operation_submitted_at').present?
+        # Past the point of no return - never restart
+        Rails.logger.warn("Migration #{self.token} verified at status '#{status}' after the PLC step; not restarting")
+      else
+        # Advanced without verification by an older sweeper, or failed before
+        # verification. Restart from the top so the transferred data is fresh
+        # (the user may have kept posting in the meantime). CreateAccountJob
+        # recognises the account this migration created earlier and continues.
+        Rails.logger.warn("Migration #{self.token} verified at status '#{status}'; restarting the pipeline from the beginning")
+        update!(status: :pending_account, last_error: nil, error_code: nil, current_job_attempt: 0)
+        schedule_first_job
+      end
       true
     else
       Rails.logger.warn("Invalid email verification code for migration #{self.token}")
@@ -565,8 +615,23 @@ class Migration < ApplicationRecord
   # the correct state instead of skipping via idempotency check.
   def advance_with_job!(new_status)
     previous_status = status
-    update!(status: new_status)
+
+    # Only advance when the row still has the status this process last saw.
+    # A cancellation (mark_failed!) or a competing job may have changed it in
+    # the meantime; overwriting that silently resurrected cancelled migrations
+    # (status back to pending_*, error_code still "cancelled").
+    transaction do
+      db_status = self.class.lock.where(id: id).pick(:status)
+      if db_status != previous_status
+        raise Aborted, "Migration #{token} is '#{db_status || 'deleted'}' in the database " \
+                       "(this job expected '#{previous_status}'); not advancing to #{new_status}"
+      end
+      update!(status: new_status)
+    end
+
     yield
+  rescue Aborted
+    raise
   rescue => e
     Rails.logger.error(
       "[Migration] Failed to enqueue job after advancing #{token} to #{new_status}: #{e.message}. " \
@@ -575,6 +640,7 @@ class Migration < ApplicationRecord
     update!(status: previous_status)
     raise
   end
+
 
   # Helper for download percentage calculation
   def download_percentage
@@ -595,7 +661,7 @@ class Migration < ApplicationRecord
     base = create_backup_bundle ? 40 : 20
     range = 30
 
-    completed = progress_data['blobs_completed'].to_i
+    completed = (progress_data['blobs_completed'] || progress_data['blobs_uploaded']).to_i
     total = progress_data['blobs_total'].to_i
 
     return base if total.zero?

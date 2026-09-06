@@ -72,6 +72,10 @@ class UploadRepoJob < ApplicationJob
     # Step 4: Advance to next stage
     migration.advance_to_pending_blobs!
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    logger.warn(e.message)
+
   rescue StandardError => e
     logger.error("Repo upload failed for migration #{migration&.id || migration_id}: #{e.message}")
     logger.error(e.backtrace.join("\n"))

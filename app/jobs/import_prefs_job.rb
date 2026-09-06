@@ -61,6 +61,10 @@ class ImportPrefsJob < ApplicationJob
 
     Rails.logger.info("Preferences import completed successfully for migration #{migration.token}")
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    Rails.logger.warn(e.message)
+
   rescue GoatService::RateLimitError => e
     Rails.logger.warn("Rate limit hit for migration #{migration.token}: #{e.message}")
     Rails.logger.warn("Will retry with exponential backoff")

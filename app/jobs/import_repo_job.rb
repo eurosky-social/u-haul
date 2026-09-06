@@ -105,6 +105,10 @@ class ImportRepoJob < ApplicationJob
 
     Rails.logger.info("[ImportRepoJob] Completed successfully for migration #{migration.token}")
 
+  rescue Migration::Aborted => e
+    # Cancelled, failed or completed underneath us - stop without retrying
+    Rails.logger.warn("[ImportRepoJob] #{e.message}")
+
   rescue ActiveRecord::RecordNotFound => e
     Rails.logger.error("[ImportRepoJob] Migration not found: #{migration_id}")
     # Don't retry if migration doesn't exist
