@@ -162,6 +162,7 @@ pl:
       confirm_email_access: "Proszę potwierdzić, że masz dostęp do tego adresu e-mail."
       # Step 3
       select_server: "Proszę wybrać serwer lub wpisać niestandardowy adres URL serwera"
+      captcha_unsupported: "Ten serwer wymaga weryfikacji telefonem lub captcha dla nowych kont, a tego nie da się ukończyć stąd. Najpierw załóż konto na tym serwerze, potem wróć i wybierz go ponownie — kreator wykryje istniejące konto."
       checking_server: "Sprawdzanie serwera..."
       checking_requirements: "Sprawdzanie wymagań serwera..."
       server_verified: "Serwer zweryfikowany!"
@@ -233,6 +234,10 @@ pl:
       files: "pliki"
       data_transferred: "Dane przetransferowane"
       failed: "Niepowodzenie"
+      retry_failed_blobs: "Ponów nieudane pliki"
+      missing_files_title: "Pliki jeszcze nieprzeniesione: %{count}"
+      missing_files_detail: "Są automatycznie ponawiane w tle, także po zakończeniu migracji, i możesz ponowić je teraz. Możesz kontynuować migrację; dotknięte obrazy lub filmy będą wyglądać na uszkodzone, dopóki pliki nie dotrą."
+      missing_files_completed: "Twoja migracja została zakończona, ale te pliki są nadal przenoszone w tle. Dotknięte obrazy lub filmy wyglądają na uszkodzone, dopóki nie dotrą. Możesz też ponowić je teraz. NIE zmieniaj hasła do nowego konta, dopóki nie otrzymasz naszego końcowego e-maila potwierdzającego, że wszystkie pliki dotarły — wcześniejsza zmiana przerywa przenoszenie."
       preparing_blobs: "Przygotowywanie do transferu <strong>%{count}</strong> blobów..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ pl:
       # PLC pending — header status
       status_waiting_for_you: "Oczekiwanie na Twoją odpowiedź"
       progress_waiting_for_you: "Wymagana akcja — zobacz poniżej ↓"
+      last_updated: "Ostatnia aktualizacja %{time}"
+      poll_error: "nie udało się odświeżyć — sprawdź połączenie"
+      refresh_now: "Odśwież teraz"
 
       # PLC pending — action required banner
       action_required_title: "Wymagana akcja — Sprawdź swoją pocztę!"
@@ -344,6 +352,10 @@ pl:
       password_for: "Hasło dla %{handle}"
       enter_password_placeholder: "Wpisz hasło do konta"
       reauth_button: "Uwierzytelnij ponownie i kontynuuj migrację"
+      new_pds_reauth_safe: "Dane migracji są bezpieczne — do logowania na nowe konto potrzebne jest tylko aktualne hasło."
+      new_pds_reauth_help: "Hasło do nowego konta na <strong>%{pds}</strong> zostało odrzucone. Dzieje się tak, jeśli zresetowano tam hasło, gdy migracja była w toku. Wpisz aktualne hasło do nowego konta, aby kontynuować."
+      new_pds_password_for: "Aktualne hasło do konta na %{pds}"
+      new_pds_reauth_button: "Zapisz hasło i kontynuuj migrację"
       plc_safe: "Twoje dane migracji są bezpieczne — potrzebujesz tylko nowego tokena PLC."
       plc_request_help: "Kliknij poniższy przycisk, aby zamówić nowy token PLC. Otrzymasz go e-mailem od <strong>%{pds}</strong>."
       request_plc_confirm: "Zamówić nowy token PLC ze starego PDS?"
@@ -460,6 +472,11 @@ pl:
       tokens_missing: "Brak tokenów uwierzytelniania. Proszę wrócić i ponownie się uwierzytelnić."
       account_not_found: "Nie znaleziono konta na %{pds} z Twoim DID (%{did}). Proszę wrócić i wybrać inny docelowy PDS lub rozpocząć nową migrację."
       account_verify_failed: "Nie udało się zweryfikować istnienia konta na %{pds}: %{error}. Proszę spróbować ponownie."
+      invalid_target_host: "\"%{host}\" nie jest prawidłowym adresem serwera. Wróć do kroku 3 i wybierz lub wpisz serwer docelowy (na przykład pds.example.com)."
+      target_host_is_handle: "\"%{host}\" to Twój identyfikator (handle), a nie adres serwera. Wróć do kroku 3 i wybierz serwer docelowy ponownie."
+      captcha_unsupported: "%{pds} wymaga weryfikacji telefonem lub captcha dla nowych kont, czego to narzędzie nie może ukończyć. Najpierw załóż konto na tym serwerze, potem rozpocznij nową migrację i wybierz go ponownie."
+      new_pds_reauth_failed: "Nie udało się zalogować na konto na %{pds}: %{error}. Sprawdź hasło."
+      new_pds_reauth_success: "Hasło do konta na %{pds} zapisane. Możesz teraz przesłać kod potwierdzający PLC lub poprosić o nowy."
       target_tokens_missing: "Brak tokenów uwierzytelniania docelowego PDS. Proszę wrócić i zweryfikować dane logowania na %{pds}."
       reauth_not_available: "Ponowne uwierzytelnianie nie jest dostępne na tym etapie."
       reauth_failed: "Uwierzytelnianie nie powiodło się: %{error}. Proszę sprawdzić hasło."
@@ -548,6 +565,9 @@ pl:
       hosting_miss: "Wielu użytkowników pomija ten krok — bez prawidłowego dostawcy hostingu nie będziesz mógł/mogła się zalogować."
       change_password_heading: "ZMIEŃ SWOJE HASŁO"
       change_password_help: "Dla Twojego bezpieczeństwa zdecydowanie zalecamy natychmiastową zmianę hasła:"
+      missing_files_heading: "NIEKTÓRE PLIKI SĄ NADAL PRZENOSZONE"
+      missing_files_help: "Liczba plików (obrazów lub filmów) jeszcze nieprzeniesionych: %{count}. Są automatycznie ponawiane w tle; dotknięte wpisy pokazują uszkodzone obrazy, dopóki pliki nie dotrą. WAŻNE: nie zmieniaj hasła do nowego konta, dopóki nie otrzymasz naszego końcowego e-maila potwierdzającego, że wszystkie pliki dotarły. Wcześniejsza zmiana przerywa przenoszenie. Postęp możesz sprawdzić i ponowić na stronie statusu:"
+      change_password_wait: "NIE zmieniaj jeszcze tego hasła: niektóre z Twoich plików są nadal przenoszone w tle, a zmiana hasła przerwałaby przenoszenie. Poczekaj na nasz końcowy e-mail potwierdzający, że wszystkie pliki dotarły, i dopiero wtedy je zmień."
       change_password_later: "Możesz je również zmienić później w ustawieniach konta."
       whats_next: "CO DALEJ?"
       next1: "Twoje konto jest teraz aktywne na %{pds}"
@@ -559,6 +579,23 @@ pl:
       privacy2: "Wszystkie zaszyfrowane dane logowania zostały bezpiecznie usunięte z naszych serwerów"
       support: "Jeśli masz pytania lub problemy, skontaktuj się z pomocą techniczną, podając token migracji:"
       email_footer: "Ta wiadomość została wysłana na adres %{email}, ponieważ zainicjowałeś/aś migrację konta."
+
+    blobs_transfer_complete:
+      subject: "Wszystkie pliki przeniesione — migracja jest w pełni zakończona (%{token})"
+      heading: "WSZYSTKIE PLIKI DOTARŁY"
+      intro: "Pliki, które były jeszcze przenoszone w chwili zakończenia migracji, dotarły już wszystkie na %{pds}. Twoje wpisy, obrazy i filmy są kompletne."
+      can_change_password: "Możesz teraz bezpiecznie zmienić hasło do konta na %{pds}."
+      status_page: "Strona statusu migracji (dostępna do momentu usunięcia rekordu migracji):"
+      support: "Jeśli potrzebujesz pomocy, skontaktuj się z pomocą techniczną i podaj token migracji:"
+
+    blobs_transfer_incomplete:
+      subject: "Pliki, których nie udało się przenieść: %{count} (%{token})"
+      heading: "NIEKTÓRYCH PLIKÓW NIE UDAŁO SIĘ PRZENIEŚĆ"
+      intro: "Liczba plików (obrazów lub filmów), których mimo kilku automatycznych prób nie udało się przenieść na %{pds}: %{count}. Dotknięte wpisy pokazują uszkodzone obrazy."
+      what_to_do: "Otwórz stronę statusu i użyj „Ponów nieudane pliki”. Każda próba korzysta z kopii z Twojej kopii zapasowej, więc nic nie ginie. Gdy wszystko dotrze, otrzymasz końcowy e-mail:"
+      keep_password: "Do tego czasu NIE zmieniaj hasła do konta na %{pds} — zmiana przerywa przenoszenie na dobre."
+      support: "Jeśli próby nadal się nie udają, skontaktuj się z pomocą techniczną i podaj token migracji:"
+
 
     migration_failed:
       subject: "Migracja nie powiodła się - wymagane działanie (%{token})"
@@ -604,6 +641,7 @@ pl:
       key_warning: "Przechowaj ten klucz w menedżerze haseł lub innym bezpiecznym miejscu. NIE będziesz mógł/mogła go później odzyskać."
       next_step: "Przejdź do strony migracji, aby wpisać kod potwierdzający PLC:"
       check_email: "Sprawdź pocztę e-mail w poszukiwaniu kodu od starego dostawcy PDS — wygląda jak XXXXX-XXXXX"
+      no_password_reset: "Ważne: nie loguj się na nowe konto na %{pds} i nie resetuj tam hasła, dopóki ta migracja się nie zakończy. Zresetowanie hasła unieważnia dane logowania używane przez migrację, która wtedy się nie powiedzie."
 
     plc_token_failed:
       subject: "Wymagane działanie: Zamów nowy kod potwierdzający PLC (%{token})"

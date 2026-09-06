@@ -162,6 +162,7 @@ hr:
       confirm_email_access: "Potvrdite da imate pristup ovoj adresi e-poste."
       # Step 3
       select_server: "Odaberite posluzitelj ili unesite URL prilagodenog posluzitelja"
+      captcha_unsupported: "Ovaj poslužitelj zahtijeva provjeru telefonom ili captchom za nove račune, što se odavde ne može dovršiti. Najprije stvorite račun na tom poslužitelju, zatim se vratite i ponovno ga odaberite — čarobnjak će prepoznati postojeći račun."
       checking_server: "Provjera posluzitelja..."
       checking_requirements: "Provjera zahtjeva posluzitelja..."
       server_verified: "Posluzitelj potvrden!"
@@ -233,6 +234,10 @@ hr:
       files: "datoteka"
       data_transferred: "Podataka preneseno"
       failed: "Neuspjelo"
+      retry_failed_blobs: "Ponovno pokušaj neuspjele datoteke"
+      missing_files_title: "Još neprenesene datoteke: %{count}"
+      missing_files_detail: "Automatski se ponovno pokušavaju u pozadini, i nakon završetka migracije, a možete ih pokušati i sada. Možete nastaviti s migracijom; pogođene slike ili videozapisi izgledaju oštećeno dok datoteke ne stignu."
+      missing_files_completed: "Vaša je migracija dovršena, ali ove se datoteke još prenose u pozadini. Pogođene slike ili videozapisi izgledaju oštećeno dok ne stignu. Možete ih pokušati i sada. NE mijenjajte lozinku novog računa dok ne primite našu završnu e-poštu koja potvrđuje da su sve datoteke stigle — ranija promjena prekida prijenos."
       preparing_blobs: "Priprema za prijenos <strong>%{count}</strong> blobova..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ hr:
       # PLC pending — header status
       status_waiting_for_you: "Čeka vaš unos"
       progress_waiting_for_you: "Potrebna radnja — pogledajte dolje ↓"
+      last_updated: "Zadnje ažurirano %{time}"
+      poll_error: "osvježavanje nije uspjelo — provjerite vezu"
+      refresh_now: "Osvježi sada"
 
       # PLC pending — action required banner
       action_required_title: "Potrebna radnja — Provjerite svoju e-poštu!"
@@ -344,6 +352,10 @@ hr:
       password_for: "Lozinka za %{handle}"
       enter_password_placeholder: "Unesite lozinku racuna"
       reauth_button: "Ponovna autentifikacija i nastavak migracije"
+      new_pds_reauth_safe: "Vaši su podaci o migraciji sigurni — za prijavu na novi račun potrebna je samo trenutačna lozinka."
+      new_pds_reauth_help: "Lozinka vašeg novog računa na <strong>%{pds}</strong> je odbijena. To se događa ako ste ondje ponovno postavili lozinku dok je migracija bila na čekanju. Unesite trenutačnu lozinku novog računa za nastavak."
+      new_pds_password_for: "Trenutačna lozinka vašeg računa na %{pds}"
+      new_pds_reauth_button: "Spremi lozinku i nastavi migraciju"
       plc_safe: "Vasi podaci o migraciji su sigurni — samo trebate novi PLC token."
       plc_request_help: "Kliknite gumb ispod za zahtjev novog PLC tokena. Primit cete ga e-postom od <strong>%{pds}</strong>."
       request_plc_confirm: "Zatraziti novi PLC token od vaseg starog PDS-a?"
@@ -460,6 +472,11 @@ hr:
       tokens_missing: "Tokeni za autentifikaciju nedostaju. Vratite se i ponovno se autentificirajte."
       account_not_found: "Racun s vasim DID-om (%{did}) nije pronaden na %{pds}. Vratite se i odaberite drugi odredisni PDS ili pokrenite novu migraciju."
       account_verify_failed: "Provjera postojanja racuna na %{pds} nije uspjela: %{error}. Pokusajte ponovo."
+      invalid_target_host: "\"%{host}\" nije valjana adresa poslužitelja. Vratite se na korak 3 i odaberite ili unesite odredišni poslužitelj (na primjer pds.example.com)."
+      target_host_is_handle: "\"%{host}\" je vaš handle, a ne adresa poslužitelja. Vratite se na korak 3 i ponovno odaberite odredišni poslužitelj."
+      captcha_unsupported: "%{pds} zahtijeva provjeru telefonom ili captchom za nove račune, što ovaj alat ne može dovršiti. Najprije stvorite račun na tom poslužitelju, zatim pokrenite novu migraciju i ponovno ga odaberite."
+      new_pds_reauth_failed: "Prijava na vaš račun na %{pds} nije uspjela: %{error}. Provjerite lozinku."
+      new_pds_reauth_success: "Lozinka vašeg računa na %{pds} je spremljena. Sada možete poslati PLC potvrdni kod ili zatražiti novi."
       target_tokens_missing: "Tokeni za autentifikaciju odredisnog PDS-a nedostaju. Vratite se i potvrdite svoje vjerodajnice na %{pds}."
       reauth_not_available: "Ponovna autentifikacija nije dostupna u ovoj fazi."
       reauth_failed: "Autentifikacija neuspjesna: %{error}. Provjerite lozinku."
@@ -548,6 +565,9 @@ hr:
       hosting_miss: "Mnogi korisnici preskoce ovaj korak — bez ispravnog pruzatelja hostinga necete se moci prijaviti."
       change_password_heading: "PROMIJENITE LOZINKU"
       change_password_help: "Radi vase sigurnosti, snazno preporucujemo da odmah promijenite lozinku:"
+      missing_files_heading: "NEKE SE DATOTEKE JOŠ PRENOSE"
+      missing_files_help: "Broj još neprenesenih datoteka (slika ili videozapisa): %{count}. Automatski se ponovno pokušavaju u pozadini; pogođene objave prikazuju oštećene slike dok ne stignu. VAŽNO: ne mijenjajte lozinku novog računa dok ne primite našu završnu e-poštu koja potvrđuje da su sve datoteke stigle. Ranija promjena prekida prijenos. Napredak možete pratiti i ponovno pokušati na stranici stanja:"
+      change_password_wait: "NE mijenjajte još ovu lozinku: neke se vaše datoteke još prenose u pozadini, a promjena lozinke prekinula bi prijenos. Pričekajte našu završnu e-poštu koja potvrđuje da su sve datoteke stigle, a zatim je promijenite."
       change_password_later: "Mozete je promijeniti i kasnije u postavkama racuna."
       whats_next: "STO SE DOGADA DALJE?"
       next1: "Vas racun je sada aktivan na %{pds}"
@@ -559,6 +579,23 @@ hr:
       privacy2: "Sve sifrirane vjerodajnice sigurno su izbrisane s nasih posluzitelja"
       support: "Ako imate pitanja ili problema, kontaktirajte podrsku s tokenom migracije:"
       email_footer: "Ova e-poruka poslana je na %{email} jer ste pokrenuli migraciju racuna."
+
+    blobs_transfer_complete:
+      subject: "Sve datoteke prenesene — vaša je migracija potpuno dovršena (%{token})"
+      heading: "SVE SU DATOTEKE STIGLE"
+      intro: "Datoteke koje su se još prenosile kad je vaša migracija dovršena sada su sve stigle na %{pds}. Vaše objave, slike i videozapisi su potpuni."
+      can_change_password: "Sada možete sigurno promijeniti lozinku svog računa na %{pds}."
+      status_page: "Stranica stanja migracije (dostupna dok se zapis o migraciji ne izbriše):"
+      support: "Ako trebate pomoć, obratite se podršci i navedite svoj migracijski token:"
+
+    blobs_transfer_incomplete:
+      subject: "Datoteke koje nije bilo moguće prenijeti: %{count} (%{token})"
+      heading: "NEKE DATOTEKE NIJE BILO MOGUĆE PRENIJETI"
+      intro: "Broj datoteka (slika ili videozapisa) koje unatoč nekoliko automatskih pokušaja nije bilo moguće prenijeti na %{pds}: %{count}. Pogođene objave prikazuju oštećene slike."
+      what_to_do: "Otvorite stranicu stanja i upotrijebite „Ponovno pokušaj neuspjele datoteke“. Svaki pokušaj koristi kopije iz vaše sigurnosne kopije, pa se ništa ne gubi. Primit ćete završnu e-poštu kad sve stigne:"
+      keep_password: "Do tada NE mijenjajte lozinku svog računa na %{pds} — promjena zauvijek prekida prijenos."
+      support: "Ako pokušaji i dalje ne uspijevaju, obratite se podršci i navedite svoj migracijski token:"
+
 
     migration_failed:
       subject: "Migracija neuspjesna - potrebna radnja (%{token})"
@@ -604,6 +641,7 @@ hr:
       key_warning: "Pohranite ovaj kljuc u upravitelj lozinki ili na drugo sigurno mjesto. NECETE ga moci dohvatiti kasnije."
       next_step: "Idite na stranicu migracije za unos PLC potvrdnog koda:"
       check_email: "Provjerite e-postu za kod od vaseg starog pruzatelja PDS-a — izgleda poput XXXXX-XXXXX"
+      no_password_reset: "Važno: ne prijavljujte se na novi račun na %{pds} i ne postavljajte ondje ponovno lozinku dok ova migracija ne završi. Ponovno postavljanje lozinke poništava vjerodajnice koje migracija koristi i migracija neće uspjeti."
 
     plc_token_failed:
       subject: "Potrebna radnja: Zatrazite novi PLC potvrdni kod (%{token})"

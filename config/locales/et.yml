@@ -162,6 +162,7 @@ et:
       confirm_email_access: "Palun kinnitage, et teil on juurdepääs sellele e-posti aadressile."
       # Step 3
       select_server: "Palun valige server või sisestage kohandatud serveri URL"
+      captcha_unsupported: "See server nõuab uute kontode jaoks telefoni- või captcha-kontrolli, mida siit lõpule viia ei saa. Looge konto kõigepealt sellel serveril, seejärel tulge tagasi ja valige see uuesti — viisard tuvastab olemasoleva konto."
       checking_server: "Serveri kontrollimine..."
       checking_requirements: "Serveri nõuete kontrollimine..."
       server_verified: "Server kinnitatud!"
@@ -233,6 +234,10 @@ et:
       files: "faili"
       data_transferred: "Andmed üle kantud"
       failed: "Ebaõnnestunud"
+      retry_failed_blobs: "Proovi ebaõnnestunud faile uuesti"
+      missing_files_title: "Veel üle kandmata failid: %{count}"
+      missing_files_detail: "Neid proovitakse taustal automaatselt uuesti, ka pärast migratsiooni lõppu, ja võite kohe uuesti proovida. Võite migratsiooniga jätkata; mõjutatud pildid või videod paistavad katkisena, kuni failid on kohale jõudnud."
+      missing_files_completed: "Teie migratsioon on lõpetatud, kuid neid faile kantakse taustal veel üle. Mõjutatud pildid või videod paistavad katkisena, kuni need on kohale jõudnud. Võite ka kohe uuesti proovida. ÄRGE muutke oma uue konto parooli enne, kui olete saanud meie lõpliku e-kirja, mis kinnitab, et kõik failid on kohale jõudnud — varasem muutmine katkestab ülekande."
       preparing_blobs: "<strong>%{count}</strong> blobi ülekandmiseks valmistumine..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ et:
       # PLC pending — header status
       status_waiting_for_you: "Ootab teie vastust"
       progress_waiting_for_you: "Tegevus vajalik — vaata allpool ↓"
+      last_updated: "Viimati uuendatud %{time}"
+      poll_error: "värskendamine ebaõnnestus — kontrollige ühendust"
+      refresh_now: "Värskenda kohe"
 
       # PLC pending — action required banner
       action_required_title: "Tegevus vajalik — Kontrollige oma e-posti!"
@@ -344,6 +352,10 @@ et:
       password_for: "Parool kasutajale %{handle}"
       enter_password_placeholder: "Sisestage oma konto parool"
       reauth_button: "Autendi uuesti ja jätka migreerimist"
+      new_pds_reauth_safe: "Teie migratsiooniandmed on turvalised — uude kontosse sisselogimiseks on vaja vaid praegust parooli."
+      new_pds_reauth_help: "Teie uue konto parool serveris <strong>%{pds}</strong> lükati tagasi. See juhtub, kui lähtestasite seal parooli migratsiooni ootel olles. Jätkamiseks sisestage oma uue konto praegune parool."
+      new_pds_password_for: "Teie konto praegune parool serveris %{pds}"
+      new_pds_reauth_button: "Salvesta parool ja jätka migratsiooni"
       plc_safe: "Teie migreerimisandmed on kaitstud — vajate vaid uut PLC tokenit."
       plc_request_help: "Klõpsake alloleval nupul, et taotleda uut PLC tokenit. Saate selle e-posti teel serverilt <strong>%{pds}</strong>."
       request_plc_confirm: "Taotleda uut PLC tokenit oma vanalt PDS-ilt?"
@@ -460,6 +472,11 @@ et:
       tokens_missing: "Autentimise tokenid puuduvad. Palun minge tagasi ja autendige uuesti."
       account_not_found: "Serveris %{pds} ei leitud teie DID-ga (%{did}) kontot. Palun minge tagasi ja valige teine siht-PDS või alustage uut migreerimist."
       account_verify_failed: "Konto olemasolu kinnitamine serveris %{pds} ebaõnnestus: %{error}. Palun proovige uuesti."
+      invalid_target_host: "\"%{host}\" ei ole kehtiv serveri aadress. Minge tagasi 3. sammu juurde ning valige või sisestage sihtserver (näiteks pds.example.com)."
+      target_host_is_handle: "\"%{host}\" on teie kasutajanimi (handle), mitte serveri aadress. Minge tagasi 3. sammu juurde ja valige sihtserver uuesti."
+      captcha_unsupported: "%{pds} nõuab uute kontode jaoks telefoni- või captcha-kontrolli, mida see tööriist lõpule viia ei saa. Looge konto kõigepealt sellel serveril, seejärel alustage uut migratsiooni ja valige see uuesti."
+      new_pds_reauth_failed: "Teie kontosse serveris %{pds} ei õnnestunud sisse logida: %{error}. Kontrollige parooli."
+      new_pds_reauth_success: "Teie konto parool serveris %{pds} on salvestatud. Nüüd võite esitada PLC kinnituskoodi või taotleda uut."
       target_tokens_missing: "Siht-PDS-i autentimise tokenid puuduvad. Palun minge tagasi ja kinnitage oma volitused serveris %{pds}."
       reauth_not_available: "Taasautentimine ei ole selles etapis saadaval."
       reauth_failed: "Autentimine ebaõnnestus: %{error}. Palun kontrollige oma parooli."
@@ -548,6 +565,9 @@ et:
       hosting_miss: "Paljud kasutajad jätavad selle sammu vahele — ilma õige majutusteenuse pakkujata ei saa te sisse logida."
       change_password_heading: "MUUTKE OMA PAROOLI"
       change_password_help: "Teie turvalisuse huvides soovitame tungivalt parooli kohe muuta:"
+      missing_files_heading: "MÕNDA FAILI KANTAKSE VEEL ÜLE"
+      missing_files_help: "Veel üle kandmata failide (piltide või videote) arv: %{count}. Neid proovitakse taustal automaatselt uuesti; mõjutatud postitustes on katkised pildid, kuni failid on kohale jõudnud. TÄHTIS: ärge muutke oma uue konto parooli enne, kui olete saanud meie lõpliku e-kirja, mis kinnitab, et kõik failid on kohale jõudnud. Varasem muutmine katkestab ülekande. Edenemist saate jälgida ja uuesti proovida olekulehel:"
+      change_password_wait: "ÄRGE veel seda parooli muutke: osa teie failidest kantakse taustal veel üle ja parooli muutmine katkestaks ülekande. Oodake meie lõplikku e-kirja, mis kinnitab, et kõik failid on kohale jõudnud, ja muutke see seejärel."
       change_password_later: "Saate seda muuta ka hiljem oma konto seadetes."
       whats_next: "MIS JUHTUB JÄRGMISENA?"
       next1: "Teie konto on nüüd aktiivne serveris %{pds}"
@@ -559,6 +579,23 @@ et:
       privacy2: "Kõik krüpteeritud volitused on meie serveritest turvaliselt kustutatud"
       support: "Kui teil on küsimusi või probleeme, võtke ühendust toega oma migreerimise tokeniga:"
       email_footer: "See e-kiri saadeti aadressile %{email}, kuna te algatasite konto migreerimise."
+
+    blobs_transfer_complete:
+      subject: "Kõik failid üle kantud — teie migratsioon on täielikult lõpetatud (%{token})"
+      heading: "KÕIK FAILID ON KOHALE JÕUDNUD"
+      intro: "Failid, mida teie migratsiooni lõppedes veel üle kanti, on nüüd kõik serverisse %{pds} jõudnud. Teie postitused, pildid ja videod on täielikud."
+      can_change_password: "Nüüd võite oma konto parooli serveris %{pds} turvaliselt muuta."
+      status_page: "Migratsiooni olekuleht (saadaval, kuni migratsioonikirje kustutatakse):"
+      support: "Kui vajate abi, võtke ühendust toega ja lisage oma migratsiooni token:"
+
+    blobs_transfer_incomplete:
+      subject: "Failid, mida ei õnnestunud üle kanda: %{count} (%{token})"
+      heading: "MÕNDA FAILI EI ÕNNESTUNUD ÜLE KANDA"
+      intro: "Failide (piltide või videote) arv, mida mitmest automaatsest katsest hoolimata ei õnnestunud serverisse %{pds} üle kanda: %{count}. Mõjutatud postitustes on katkised pildid."
+      what_to_do: "Avage olekuleht ja kasutage nuppu „Proovi ebaõnnestunud faile uuesti“. Iga katse kasutab teie varukoopia koopiaid, seega midagi ei lähe kaduma. Kui kõik on kohale jõudnud, saate lõpliku e-kirja:"
+      keep_password: "Seni ÄRGE muutke oma konto parooli serveris %{pds} — muutmine katkestab ülekande lõplikult."
+      support: "Kui katsed ebaõnnestuvad jätkuvalt, võtke ühendust toega ja lisage oma migratsiooni token:"
+
 
     migration_failed:
       subject: "Migreerimine ebaõnnestus - Vajalik tegevus (%{token})"
@@ -604,6 +641,7 @@ et:
       key_warning: "Hoidke seda võtit paroolihalduris või muus turvalises kohas. Te EI SAA seda hiljem uuesti hankida."
       next_step: "Minge migreerimise lehele, et sisestada oma PLC kinnituskood:"
       check_email: "Kontrollige oma e-posti koodi saamiseks oma vanalt PDS-i pakkujalt — see näeb välja nagu XXXXX-XXXXX"
+      no_password_reset: "Tähtis: ärge logige oma uude kontosse serveris %{pds} sisse ega lähtestage seal parooli enne, kui see migratsioon on lõpetatud. Parooli lähtestamine muudab migratsiooni kasutatavad sisselogimisandmed kehtetuks ja migratsioon ebaõnnestub."
 
     plc_token_failed:
       subject: "Vajalik tegevus: Taotlege uus PLC kinnituskood (%{token})"

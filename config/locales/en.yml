@@ -164,6 +164,7 @@ en:
       confirm_email_access: "Please confirm that you have access to this email address."
       # Step 3
       select_server: "Please select a Server or enter a custom Server URL"
+      captcha_unsupported: "This server requires phone or captcha verification for new accounts, which cannot be completed from here. Create the account on that server first, then come back and choose it again — the wizard will detect the existing account."
       checking_server: "Checking Server..."
       checking_requirements: "Checking Server requirements..."
       server_verified: "Server verified!"
@@ -243,6 +244,10 @@ en:
       files: "files"
       data_transferred: "Data Transferred"
       failed: "Failed"
+      retry_failed_blobs: "Retry failed files"
+      missing_files_title: "Files not transferred yet: %{count}"
+      missing_files_detail: "They are retried automatically in the background, also after the migration has completed, and you can retry them now. You can continue with the migration; affected images or videos look broken until the files have arrived."
+      missing_files_completed: "Your migration is complete, but these files are still being transferred in the background. Affected images or videos look broken until they have arrived. You can also retry them now. Do NOT change the password of your new account until you receive our final email confirming that all files have arrived — changing it earlier cuts off the transfer."
       preparing_blobs: "Preparing to transfer <strong>%{count}</strong> blobs..."
 
       # Download/backup progress
@@ -257,6 +262,9 @@ en:
       # PLC pending — header status
       status_waiting_for_you: "Waiting for your input"
       progress_waiting_for_you: "Action required — see below ↓"
+      last_updated: "Last updated %{time}"
+      poll_error: "could not refresh — check your connection"
+      refresh_now: "Refresh now"
 
       # PLC pending — action required banner
       action_required_title: "Action Required — Check Your Email!"
@@ -354,6 +362,10 @@ en:
       password_for: "Password for %{handle}"
       enter_password_placeholder: "Enter your account password"
       reauth_button: "Re-authenticate & Continue Migration"
+      new_pds_reauth_safe: "Your migration data is safe — the login to your new account just needs the current password."
+      new_pds_reauth_help: "The password for your new account on <strong>%{pds}</strong> was rejected. This happens if you reset the password there while the migration was pending. Enter the current password of your new account to continue."
+      new_pds_password_for: "Current password for your account on %{pds}"
+      new_pds_reauth_button: "Save password & Continue Migration"
       plc_safe: "Your migration data is safe — you just need a fresh PLC token."
       plc_request_help: "Click the button below to request a new PLC token. You'll receive it via email from <strong>%{pds}</strong>."
       request_plc_confirm: "Request a new PLC token from your old PDS?"
@@ -476,6 +488,11 @@ en:
       tokens_missing: "Authentication tokens are missing. Please go back and re-authenticate."
       account_not_found: "No account found on %{pds} with your DID (%{did}). Please go back and select a different target PDS, or start a new migration."
       account_verify_failed: "Failed to verify account existence on %{pds}: %{error}. Please try again."
+      invalid_target_host: '"%{host}" is not a valid server address. Please go back to step 3 and select or enter the destination server (for example pds.example.com).'
+      target_host_is_handle: '"%{host}" is your handle, not a server address. Please go back to step 3 and select the destination server again.'
+      captcha_unsupported: "%{pds} requires phone or captcha verification for new accounts, which this tool cannot complete. Create the account on that server first, then start a new migration and choose it again."
+      new_pds_reauth_failed: "Could not log in to your account on %{pds}: %{error}. Please check the password."
+      new_pds_reauth_success: "Password for your account on %{pds} saved. You can now submit your PLC confirmation code, or request a new one."
       target_tokens_missing: "Target PDS authentication tokens are missing. Please go back and verify your credentials on %{pds}."
       reauth_not_available: "Re-authentication is not available at this stage."
       reauth_failed: "Authentication failed: %{error}. Please check your password."
@@ -564,6 +581,9 @@ en:
       hosting_miss: "Many users miss this step — without the correct hosting provider, you won't be able to sign in."
       change_password_heading: "CHANGE YOUR PASSWORD"
       change_password_help: "For your security, we strongly recommend changing your password immediately:"
+      missing_files_heading: "SOME FILES ARE STILL BEING TRANSFERRED"
+      missing_files_help: "Number of files (images or videos) not transferred yet: %{count}. They are retried automatically in the background; affected posts show broken images until they have arrived. IMPORTANT: do not change the password of your new account until you receive our final email confirming that all files have arrived. Changing it earlier cuts off the transfer. You can check progress and retry on the status page:"
+      change_password_wait: "Do NOT change this password yet: some of your files are still being transferred in the background, and changing the password would cut off the transfer. Wait for our final email confirming that all files have arrived, then change it."
       change_password_later: "You can also change it later in your account settings."
       whats_next: "WHAT HAPPENS NEXT?"
       next1: "Your account is now live on %{pds}"
@@ -620,6 +640,7 @@ en:
       key_warning: "Store this key in a password manager or other secure location. You will NOT be able to retrieve it later."
       next_step: "Go to the migration page to enter your PLC confirmation code:"
       check_email: "Check your email for a code from your old PDS provider — it looks like XXXXX-XXXXX"
+      no_password_reset: "Important: do not log in to or reset the password of your new account on %{pds} until this migration has completed. Resetting the password there invalidates the credentials the migration uses, and it will fail."
 
     plc_token_failed:
       subject: "Action Required: Request a New PLC Confirmation Code (%{token})"
@@ -687,8 +708,21 @@ en:
       confirm_link: "Confirm Cancellation"
       not_you: "If you didn't request this cancellation, you can safely ignore this email. Your migration will continue as normal."
 
-    failed_blobs_retry_complete:
-      subject: "Blob Retry Complete: %{successful_count} succeeded, %{failed_count} still failed (%{token})"
+    blobs_transfer_complete:
+      subject: "All files transferred — your migration is fully complete (%{token})"
+      heading: "ALL FILES HAVE ARRIVED"
+      intro: "The files that were still being transferred when your migration completed have now all arrived on %{pds}. Your posts, images and videos are complete."
+      can_change_password: "You can now safely change the password of your account on %{pds}."
+      status_page: "Migration status page (available until the migration record is deleted):"
+      support: "If you need help, contact support and include your migration token:"
+
+    blobs_transfer_incomplete:
+      subject: "Files that could not be transferred: %{count} (%{token})"
+      heading: "SOME FILES COULD NOT BE TRANSFERRED"
+      intro: "Number of files (images or videos) that could not be transferred to %{pds} despite several automatic attempts: %{count}. The affected posts show broken images."
+      what_to_do: "Open the status page and use \"Retry failed files\". Each retry uses the copies from your backup, so nothing is lost. You will receive a final email once everything has arrived:"
+      keep_password: "Until then, do NOT change the password of your account on %{pds} — changing it cuts off the transfer for good."
+      support: "If retries keep failing, contact support and include your migration token:"
 
     plc_otp:
       subject: "PLC Verification Code - Point of No Return (%{token})"

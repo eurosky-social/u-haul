@@ -162,6 +162,7 @@ ga:
       confirm_email_access: "Deimhnigh le do thoil go bhfuil rochtain agat ar an seoladh ríomhphoist seo."
       # Step 3
       select_server: "Roghnaigh freastalaí nó cuir isteach URL freastalaí shaincheaptha le do thoil"
+      captcha_unsupported: "Éilíonn an freastalaí seo fíorú gutháin nó captcha do chuntais nua, agus ní féidir é sin a chríochnú as seo. Cruthaigh an cuntas ar an bhfreastalaí sin ar dtús, ansin tar ar ais agus roghnaigh arís é — aithneoidh an treoraí an cuntas atá ann cheana."
       checking_server: "Ag seiceáil an fhreastalaí..."
       checking_requirements: "Ag seiceáil riachtanais an fhreastalaí..."
       server_verified: "Freastalaí deimhnithe!"
@@ -233,6 +234,10 @@ ga:
       files: "comhad"
       data_transferred: "Sonraí aistrithe"
       failed: "Theip"
+      retry_failed_blobs: "Bain triail eile as na comhaid ar theip orthu"
+      missing_files_title: "Comhaid nár aistríodh fós: %{count}"
+      missing_files_detail: "Baintear triail eile astu go huathoibríoch sa chúlra, fiú tar éis don aistriú a bheith críochnaithe, agus is féidir leat triail eile a bhaint astu anois. Is féidir leat leanúint ar aghaidh leis an aistriú; beidh cuma bhriste ar na híomhánna nó na físeáin lena mbaineann go dtí go sroicheann na comhaid."
+      missing_files_completed: "Tá d'aistriú críochnaithe, ach tá na comhaid seo á n-aistriú fós sa chúlra. Tá cuma bhriste ar na híomhánna nó na físeáin lena mbaineann go dtí go sroicheann siad. Is féidir leat triail eile a bhaint astu anois freisin. NÁ hathraigh pasfhocal do chuntais nua go dtí go bhfaighidh tú ár ríomhphost deiridh a dheimhníonn gur shroich na comhaid go léir — má athraíonn tú níos luaithe é, gearrtar an t-aistriú."
       preparing_blobs: "Ag ullmhú chun <strong>%{count}</strong> blob a aistriú..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ ga:
       # PLC pending — header status
       status_waiting_for_you: "Ag fanacht ar do fhreagra"
       progress_waiting_for_you: "Gníomh ag teastáil — féach thíos ↓"
+      last_updated: "Nuashonraithe go deireanach %{time}"
+      poll_error: "níorbh fhéidir athnuachan — seiceáil do nasc"
+      refresh_now: "Athnuaigh anois"
 
       # PLC pending — action required banner
       action_required_title: "Gníomh ag teastáil — Seiceáil do ríomhphost!"
@@ -344,6 +352,10 @@ ga:
       password_for: "Pasfhocal do %{handle}"
       enter_password_placeholder: "Cuir isteach pasfhocal do chuntais"
       reauth_button: "Athfhíordheimhnigh agus lean ar aghaidh leis an imirce"
+      new_pds_reauth_safe: "Tá do shonraí aistrithe slán — níl ag teastáil ón logáil isteach chuig do chuntas nua ach an pasfhocal reatha."
+      new_pds_reauth_help: "Diúltaíodh don phasfhocal do do chuntas nua ar <strong>%{pds}</strong>. Tarlaíonn sé seo má d'athshocraigh tú an pasfhocal ansin agus an t-aistriú ar feitheamh. Cuir isteach pasfhocal reatha do chuntais nua chun leanúint ar aghaidh."
+      new_pds_password_for: "Pasfhocal reatha do chuntais ar %{pds}"
+      new_pds_reauth_button: "Sábháil an pasfhocal agus lean leis an aistriú"
       plc_safe: "Tá do shonraí imirce sábháilte — ní theastaíonn uait ach comhartha PLC nua."
       plc_request_help: "Cliceáil ar an gcnaipe thíos chun comhartha PLC nua a iarraidh. Gheobhaidh tú é trí ríomhphost ó <strong>%{pds}</strong>."
       request_plc_confirm: "Iarr comhartha PLC nua ó do shean-PDS?"
@@ -460,6 +472,11 @@ ga:
       tokens_missing: "Tá comharthaí fíordheimhnithe ar iarraidh. Téigh siar agus athfhíordheimhnigh le do thoil."
       account_not_found: "Níor aimsíodh aon chuntas ar %{pds} le do DID (%{did}). Téigh siar agus roghnaigh PDS sprice eile, nó tosaigh imirce nua."
       account_verify_failed: "Theip ar dheimhniú go bhfuil cuntas ann ar %{pds}: %{error}. Bain triail eile as le do thoil."
+      invalid_target_host: "Ní seoladh freastalaí bailí é \"%{host}\". Téigh ar ais go céim 3 agus roghnaigh nó cuir isteach an freastalaí ceann scríbe (mar shampla pds.example.com)."
+      target_host_is_handle: "Is é \"%{host}\" do lorgainm (handle), ní seoladh freastalaí é. Téigh ar ais go céim 3 agus roghnaigh an freastalaí ceann scríbe arís."
+      captcha_unsupported: "Éilíonn %{pds} fíorú gutháin nó captcha do chuntais nua, rud nach féidir leis an uirlis seo a chríochnú. Cruthaigh an cuntas ar an bhfreastalaí sin ar dtús, ansin tosaigh aistriú nua agus roghnaigh arís é."
+      new_pds_reauth_failed: "Níorbh fhéidir logáil isteach i do chuntas ar %{pds}: %{error}. Seiceáil an pasfhocal."
+      new_pds_reauth_success: "Sábháladh an pasfhocal do do chuntas ar %{pds}. Is féidir leat do chód deimhnithe PLC a chur isteach anois nó ceann nua a iarraidh."
       target_tokens_missing: "Tá comharthaí fíordheimhnithe an PDS sprice ar iarraidh. Téigh siar agus deimhnigh do dhintiúir ar %{pds} le do thoil."
       reauth_not_available: "Níl athfhíordheimhniú ar fáil ag an gcéim seo."
       reauth_failed: "Theip ar fhíordheimhniú: %{error}. Seiceáil do phasfhocal le do thoil."
@@ -548,6 +565,9 @@ ga:
       hosting_miss: "Cailleann go leor úsáideoirí an chéim seo — gan an soláthraí óstála ceart, ní bheidh tú in ann logáil isteach."
       change_password_heading: "ATHRAIGH DO PHASFHOCAL"
       change_password_help: "Ar mhaithe le do shlándáil, molaimid go láidir do phasfhocal a athrú láithreach:"
+      missing_files_heading: "TÁ ROINNT COMHAD Á N-AISTRIÚ FÓS"
+      missing_files_help: "Líon na gcomhad (íomhánna nó físeáin) nár aistríodh fós: %{count}. Baintear triail eile astu go huathoibríoch sa chúlra; taispeánann na postálacha lena mbaineann íomhánna briste go dtí go sroicheann siad. TÁBHACHTACH: ná hathraigh pasfhocal do chuntais nua go dtí go bhfaighidh tú ár ríomhphost deiridh a dheimhníonn gur shroich na comhaid go léir. Má athraíonn tú níos luaithe é, gearrtar an t-aistriú. Is féidir leat an dul chun cinn a sheiceáil agus triail eile a bhaint as ar an leathanach stádais:"
+      change_password_wait: "NÁ hathraigh an pasfhocal seo fós: tá cuid de do chomhaid á n-aistriú fós sa chúlra, agus ghearrfadh athrú an phasfhocail an t-aistriú. Fan lenár ríomhphost deiridh a dheimhníonn gur shroich na comhaid go léir, ansin athraigh é."
       change_password_later: "Is féidir leat é a athrú níos déanaí freisin i socruithe do chuntais."
       whats_next: "CAD A THARLÓIDH ANSIN?"
       next1: "Tá do chuntas gníomhach anois ar %{pds}"
@@ -559,6 +579,23 @@ ga:
       privacy2: "Scriosadh gach dintiúir criptithe go slán ónár bhfreastalaithe"
       support: "Má tá ceisteanna nó fadhbanna agat, déan teagmháil le tacaíocht le do chomhartha imirce:"
       email_footer: "Seoladh an ríomhphost seo chuig %{email} mar thosaigh tú imirce cuntais."
+
+    blobs_transfer_complete:
+      subject: "Gach comhad aistrithe — tá d'aistriú críochnaithe go hiomlán (%{token})"
+      heading: "SHROICH NA COMHAID GO LÉIR"
+      intro: "Tá na comhaid a bhí á n-aistriú fós nuair a críochnaíodh d'aistriú tagtha go %{pds} anois. Tá do phostálacha, d'íomhánna agus d'fhíseáin iomlán."
+      can_change_password: "Is féidir leat pasfhocal do chuntais ar %{pds} a athrú go sábháilte anois."
+      status_page: "Leathanach stádais an aistrithe (ar fáil go dtí go scriostar taifead an aistrithe):"
+      support: "Má tá cabhair uait, déan teagmháil le tacaíocht agus cuir do chomhartha aistrithe san áireamh:"
+
+    blobs_transfer_incomplete:
+      subject: "Comhaid nárbh fhéidir a aistriú: %{count} (%{token})"
+      heading: "NÍORBH FHÉIDIR ROINNT COMHAD A AISTRIÚ"
+      intro: "Líon na gcomhad (íomhánna nó físeáin) nárbh fhéidir a aistriú go %{pds} in ainneoin roinnt iarrachtaí uathoibríocha: %{count}. Taispeánann na postálacha lena mbaineann íomhánna briste."
+      what_to_do: "Oscail an leathanach stádais agus úsáid \"Bain triail eile as na comhaid ar theip orthu\". Úsáideann gach iarracht na cóipeanna ó do chúltaca, mar sin ní chailltear rud ar bith. Gheobhaidh tú ríomhphost deiridh nuair a bheidh gach rud tagtha:"
+      keep_password: "Go dtí sin, NÁ hathraigh pasfhocal do chuntais ar %{pds} — gearrann athrú an t-aistriú go deo."
+      support: "Má leanann na hiarrachtaí ag teip, déan teagmháil le tacaíocht agus cuir do chomhartha aistrithe san áireamh:"
+
 
     migration_failed:
       subject: "Theip ar an imirce - Gníomh ag teastáil (%{token})"
@@ -604,6 +641,7 @@ ga:
       key_warning: "Stóráil an eochair seo i mbainisteoir pasfhocal nó áit shlán eile. NÍ bheidh tú in ann í a fháil ar ais níos déanaí."
       next_step: "Téigh chuig leathanach na himirce chun do chód deimhnithe PLC a chur isteach:"
       check_email: "Seiceáil do ríomhphost le haghaidh cóid ó do shean-soláthraí PDS — breathnaíonn sé cosúil le XXXXX-XXXXX"
+      no_password_reset: "Tábhachtach: ná logáil isteach i do chuntas nua ar %{pds} agus ná hathshocraigh an pasfhocal ansin go dtí go mbeidh an t-aistriú seo críochnaithe. Cuireann athshocrú an phasfhocail na dintiúir a úsáideann an t-aistriú ó bhail, agus teipfidh ar an aistriú."
 
     plc_token_failed:
       subject: "Gníomh ag teastáil: Iarr cód deimhnithe PLC nua (%{token})"

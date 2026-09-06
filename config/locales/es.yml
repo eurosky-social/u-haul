@@ -162,6 +162,7 @@ es:
       confirm_email_access: "Por favor, confirme que tiene acceso a esta dirección de correo electrónico."
       # Step 3
       select_server: "Por favor, seleccione un servidor o introduzca una URL de servidor personalizada"
+      captcha_unsupported: "Este servidor exige verificación por teléfono o captcha para las cuentas nuevas, y eso no se puede completar desde aquí. Cree primero la cuenta en ese servidor, vuelva y selecciónelo de nuevo: el asistente detectará la cuenta existente."
       checking_server: "Verificando servidor..."
       checking_requirements: "Comprobando requisitos del servidor..."
       server_verified: "Servidor verificado."
@@ -233,6 +234,10 @@ es:
       files: "archivos"
       data_transferred: "Datos transferidos"
       failed: "Fallidos"
+      retry_failed_blobs: "Reintentar archivos fallidos"
+      missing_files_title: "Archivos aún no transferidos: %{count}"
+      missing_files_detail: "Se reintentan automáticamente en segundo plano, también después de terminar la migración, y puede reintentarlos ahora. Puede continuar con la migración; las imágenes o vídeos afectados se verán rotos hasta que lleguen los archivos."
+      missing_files_completed: "Su migración ha terminado, pero estos archivos todavía se están transfiriendo en segundo plano. Las imágenes o vídeos afectados se ven rotos hasta que lleguen. También puede reintentarlos ahora. NO cambie la contraseña de su nueva cuenta hasta recibir nuestro correo final confirmando que han llegado todos los archivos; cambiarla antes interrumpe la transferencia."
       preparing_blobs: "Preparando la transferencia de <strong>%{count}</strong> blobs..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ es:
       # PLC pending — header status
       status_waiting_for_you: "Esperando su respuesta"
       progress_waiting_for_you: "Acción requerida — ver abajo ↓"
+      last_updated: "Última actualización %{time}"
+      poll_error: "no se pudo actualizar — compruebe su conexión"
+      refresh_now: "Actualizar ahora"
 
       # PLC pending — action required banner
       action_required_title: "Acción requerida — ¡Revise su correo electrónico!"
@@ -344,6 +352,10 @@ es:
       password_for: "Contraseña de %{handle}"
       enter_password_placeholder: "Introduzca la contraseña de su cuenta"
       reauth_button: "Reautenticar y continuar migración"
+      new_pds_reauth_safe: "Sus datos de migración están a salvo: el inicio de sesión en su nueva cuenta solo necesita la contraseña actual."
+      new_pds_reauth_help: "La contraseña de su nueva cuenta en <strong>%{pds}</strong> fue rechazada. Esto ocurre si restableció la contraseña allí mientras la migración estaba pendiente. Introduzca la contraseña actual de su nueva cuenta para continuar."
+      new_pds_password_for: "Contraseña actual de su cuenta en %{pds}"
+      new_pds_reauth_button: "Guardar contraseña y continuar la migración"
       plc_safe: "Sus datos de migración están seguros — solo necesita un nuevo token PLC."
       plc_request_help: "Haga clic en el botón de abajo para solicitar un nuevo token PLC. Lo recibirá por correo electrónico de <strong>%{pds}</strong>."
       request_plc_confirm: "¿Solicitar un nuevo token PLC de su antiguo PDS?"
@@ -460,6 +472,11 @@ es:
       tokens_missing: "Faltan tokens de autenticación. Por favor, regrese y vuelva a autenticarse."
       account_not_found: "No se encontró ninguna cuenta en %{pds} con su DID (%{did}). Por favor, regrese y seleccione un PDS de destino diferente, o inicie una nueva migración."
       account_verify_failed: "No se pudo verificar la existencia de la cuenta en %{pds}: %{error}. Por favor, inténtelo de nuevo."
+      invalid_target_host: "\"%{host}\" no es una dirección de servidor válida. Vuelva al paso 3 y seleccione o escriba el servidor de destino (por ejemplo, pds.example.com)."
+      target_host_is_handle: "\"%{host}\" es su identificador (handle), no una dirección de servidor. Vuelva al paso 3 y seleccione de nuevo el servidor de destino."
+      captcha_unsupported: "%{pds} exige verificación por teléfono o captcha para las cuentas nuevas, y esta herramienta no puede completarla. Cree primero la cuenta en ese servidor, inicie una nueva migración y selecciónelo de nuevo."
+      new_pds_reauth_failed: "No se pudo iniciar sesión en su cuenta en %{pds}: %{error}. Compruebe la contraseña."
+      new_pds_reauth_success: "Contraseña de su cuenta en %{pds} guardada. Ya puede enviar su código de confirmación PLC o solicitar uno nuevo."
       target_tokens_missing: "Faltan tokens de autenticación del PDS de destino. Por favor, regrese y verifique sus credenciales en %{pds}."
       reauth_not_available: "La reautenticación no está disponible en esta etapa."
       reauth_failed: "Error de autenticación: %{error}. Por favor, compruebe su contraseña."
@@ -548,6 +565,9 @@ es:
       hosting_miss: "Muchos usuarios omiten este paso — sin el proveedor de alojamiento correcto, no podrá iniciar sesión."
       change_password_heading: "CAMBIE SU CONTRASEÑA"
       change_password_help: "Por su seguridad, le recomendamos encarecidamente que cambie su contraseña inmediatamente:"
+      missing_files_heading: "ALGUNOS ARCHIVOS TODAVÍA SE ESTÁN TRANSFIRIENDO"
+      missing_files_help: "Número de archivos (imágenes o vídeos) aún no transferidos: %{count}. Se reintentan automáticamente en segundo plano; las publicaciones afectadas muestran imágenes rotas hasta que lleguen. IMPORTANTE: no cambie la contraseña de su nueva cuenta hasta recibir nuestro correo final confirmando que han llegado todos los archivos. Cambiarla antes interrumpe la transferencia. Puede ver el progreso y reintentar en la página de estado:"
+      change_password_wait: "NO cambie esta contraseña todavía: algunos de sus archivos aún se están transfiriendo en segundo plano, y cambiar la contraseña interrumpiría la transferencia. Espere nuestro correo final confirmando que han llegado todos los archivos y cámbiela después."
       change_password_later: "También puede cambiarla más tarde en la configuración de su cuenta."
       whats_next: "¿QUÉ OCURRE A CONTINUACIÓN?"
       next1: "Su cuenta está ahora activa en %{pds}"
@@ -559,6 +579,23 @@ es:
       privacy2: "Todas las credenciales cifradas han sido eliminadas de forma segura de nuestros servidores"
       support: "Si tiene preguntas o problemas, por favor contacte al soporte con su token de migración:"
       email_footer: "Este correo electrónico fue enviado a %{email} porque usted inició una migración de cuenta."
+
+    blobs_transfer_complete:
+      subject: "Todos los archivos transferidos: su migración está completamente terminada (%{token})"
+      heading: "HAN LLEGADO TODOS LOS ARCHIVOS"
+      intro: "Los archivos que todavía se estaban transfiriendo cuando terminó su migración ya han llegado todos a %{pds}. Sus publicaciones, imágenes y vídeos están completos."
+      can_change_password: "Ya puede cambiar con seguridad la contraseña de su cuenta en %{pds}."
+      status_page: "Página de estado de la migración (disponible hasta que se elimine el registro de la migración):"
+      support: "Si necesita ayuda, contacte con soporte e incluya su token de migración:"
+
+    blobs_transfer_incomplete:
+      subject: "Archivos que no se pudieron transferir: %{count} (%{token})"
+      heading: "ALGUNOS ARCHIVOS NO SE PUDIERON TRANSFERIR"
+      intro: "Número de archivos (imágenes o vídeos) que no se pudieron transferir a %{pds} pese a varios intentos automáticos: %{count}. Las publicaciones afectadas muestran imágenes rotas."
+      what_to_do: "Abra la página de estado y use «Reintentar archivos fallidos». Cada reintento usa las copias de su copia de seguridad, así que no se pierde nada. Recibirá un correo final cuando haya llegado todo:"
+      keep_password: "Hasta entonces, NO cambie la contraseña de su cuenta en %{pds}; cambiarla interrumpe la transferencia definitivamente."
+      support: "Si los reintentos siguen fallando, contacte con soporte e incluya su token de migración:"
+
 
     migration_failed:
       subject: "Migración fallida - Acción requerida (%{token})"
@@ -604,6 +641,7 @@ es:
       key_warning: "Almacene esta clave en un gestor de contraseñas u otra ubicación segura. NO podrá recuperarla más tarde."
       next_step: "Vaya a la página de migración para introducir su código de confirmación PLC:"
       check_email: "Revise su correo electrónico en busca de un código de su antiguo proveedor de PDS — tiene el formato XXXXX-XXXXX"
+      no_password_reset: "Importante: no inicie sesión ni restablezca la contraseña de su nueva cuenta en %{pds} hasta que esta migración haya terminado. Restablecer la contraseña allí invalida las credenciales que usa la migración, y esta fallará."
 
     plc_token_failed:
       subject: "Acción requerida: Solicite un nuevo código de confirmación PLC (%{token})"

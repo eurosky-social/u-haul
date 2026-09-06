@@ -162,6 +162,7 @@ nl:
       confirm_email_access: "Bevestig dat u toegang hebt tot dit e-mailadres."
       # Step 3
       select_server: "Selecteer een server of voer een aangepaste server-URL in"
+      captcha_unsupported: "Deze server vereist telefoon- of captcha-verificatie voor nieuwe accounts, en dat kan hier niet worden afgerond. Maak het account eerst aan op die server, kom dan terug en kies hem opnieuw — de wizard herkent het bestaande account."
       checking_server: "Server controleren..."
       checking_requirements: "Serververeisten controleren..."
       server_verified: "Server geverifieerd!"
@@ -233,6 +234,10 @@ nl:
       files: "bestanden"
       data_transferred: "Data overgedragen"
       failed: "Mislukt"
+      retry_failed_blobs: "Mislukte bestanden opnieuw proberen"
+      missing_files_title: "Nog niet overgezette bestanden: %{count}"
+      missing_files_detail: "Ze worden automatisch op de achtergrond opnieuw geprobeerd, ook nadat de migratie is afgerond, en u kunt het nu opnieuw proberen. U kunt doorgaan met de migratie; de betreffende afbeeldingen of video's lijken kapot totdat de bestanden zijn aangekomen."
+      missing_files_completed: "Uw migratie is afgerond, maar deze bestanden worden nog op de achtergrond overgezet. De betreffende afbeeldingen of video's lijken kapot totdat ze zijn aangekomen. U kunt het ook nu opnieuw proberen. Wijzig het wachtwoord van uw nieuwe account NIET voordat u onze laatste e-mail hebt ontvangen die bevestigt dat alle bestanden zijn aangekomen — eerder wijzigen breekt de overdracht af."
       preparing_blobs: "Voorbereiden op overdracht van <strong>%{count}</strong> blobs..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ nl:
       # PLC pending — header status
       status_waiting_for_you: "Wacht op uw invoer"
       progress_waiting_for_you: "Actie vereist — zie hieronder ↓"
+      last_updated: "Laatst bijgewerkt %{time}"
+      poll_error: "vernieuwen mislukt — controleer uw verbinding"
+      refresh_now: "Nu vernieuwen"
 
       # PLC pending — action required banner
       action_required_title: "Actie vereist — Controleer uw e-mail!"
@@ -344,6 +352,10 @@ nl:
       password_for: "Wachtwoord voor %{handle}"
       enter_password_placeholder: "Voer uw accountwachtwoord in"
       reauth_button: "Opnieuw authenticeren en migratie voortzetten"
+      new_pds_reauth_safe: "Uw migratiegegevens zijn veilig — voor het inloggen op uw nieuwe account is alleen het huidige wachtwoord nodig."
+      new_pds_reauth_help: "Het wachtwoord van uw nieuwe account op <strong>%{pds}</strong> is geweigerd. Dit gebeurt als u het wachtwoord daar hebt gereset terwijl de migratie nog liep. Voer het huidige wachtwoord van uw nieuwe account in om door te gaan."
+      new_pds_password_for: "Huidig wachtwoord van uw account op %{pds}"
+      new_pds_reauth_button: "Wachtwoord opslaan & migratie voortzetten"
       plc_safe: "Uw migratiegegevens zijn veilig — u hebt alleen een nieuw PLC-token nodig."
       plc_request_help: "Klik op de onderstaande knop om een nieuw PLC-token aan te vragen. U ontvangt het per e-mail van <strong>%{pds}</strong>."
       request_plc_confirm: "Een nieuw PLC-token aanvragen bij uw oude PDS?"
@@ -460,6 +472,11 @@ nl:
       tokens_missing: "Authenticatietokens ontbreken. Ga terug en authenticeer opnieuw."
       account_not_found: "Geen account gevonden op %{pds} met uw DID (%{did}). Ga terug en selecteer een andere doel-PDS, of start een nieuwe migratie."
       account_verify_failed: "Kon het bestaan van het account op %{pds} niet verifiëren: %{error}. Probeer het opnieuw."
+      invalid_target_host: "\"%{host}\" is geen geldig serveradres. Ga terug naar stap 3 en kies of typ de doelserver (bijvoorbeeld pds.example.com)."
+      target_host_is_handle: "\"%{host}\" is uw handle, geen serveradres. Ga terug naar stap 3 en kies de doelserver opnieuw."
+      captcha_unsupported: "%{pds} vereist telefoon- of captcha-verificatie voor nieuwe accounts, wat deze tool niet kan afronden. Maak het account eerst aan op die server, start dan een nieuwe migratie en kies hem opnieuw."
+      new_pds_reauth_failed: "Inloggen op uw account op %{pds} is mislukt: %{error}. Controleer het wachtwoord."
+      new_pds_reauth_success: "Wachtwoord van uw account op %{pds} opgeslagen. U kunt nu uw PLC-bevestigingscode invoeren of een nieuwe aanvragen."
       target_tokens_missing: "Authenticatietokens van de doel-PDS ontbreken. Ga terug en verifieer uw inloggegevens op %{pds}."
       reauth_not_available: "Opnieuw authenticeren is niet beschikbaar in deze fase."
       reauth_failed: "Authenticatie mislukt: %{error}. Controleer uw wachtwoord."
@@ -548,6 +565,9 @@ nl:
       hosting_miss: "Veel gebruikers missen deze stap — zonder de juiste hostingprovider kunt u niet inloggen."
       change_password_heading: "WIJZIG UW WACHTWOORD"
       change_password_help: "Voor uw veiligheid raden we sterk aan om uw wachtwoord onmiddellijk te wijzigen:"
+      missing_files_heading: "SOMMIGE BESTANDEN WORDEN NOG OVERGEZET"
+      missing_files_help: "Aantal nog niet overgezette bestanden (afbeeldingen of video's): %{count}. Ze worden automatisch op de achtergrond opnieuw geprobeerd; de betreffende berichten tonen kapotte afbeeldingen totdat ze zijn aangekomen. BELANGRIJK: wijzig het wachtwoord van uw nieuwe account niet voordat u onze laatste e-mail hebt ontvangen die bevestigt dat alle bestanden zijn aangekomen. Eerder wijzigen breekt de overdracht af. U kunt de voortgang volgen en opnieuw proberen op de statuspagina:"
+      change_password_wait: "Wijzig dit wachtwoord nog NIET: sommige van uw bestanden worden nog op de achtergrond overgezet, en het wijzigen van het wachtwoord zou de overdracht afbreken. Wacht op onze laatste e-mail die bevestigt dat alle bestanden zijn aangekomen en wijzig het daarna."
       change_password_later: "U kunt het ook later wijzigen in uw accountinstellingen."
       whats_next: "WAT GEBEURT ER HIERNA?"
       next1: "Uw account is nu actief op %{pds}"
@@ -559,6 +579,23 @@ nl:
       privacy2: "Alle versleutelde inloggegevens zijn veilig gewist van onze servers"
       support: "Als u vragen of problemen hebt, neem dan contact op met support met uw migratietoken:"
       email_footer: "Deze e-mail is gestuurd naar %{email} omdat u een accountmigratie hebt gestart."
+
+    blobs_transfer_complete:
+      subject: "Alle bestanden overgezet — uw migratie is volledig afgerond (%{token})"
+      heading: "ALLE BESTANDEN ZIJN AANGEKOMEN"
+      intro: "De bestanden die nog werden overgezet toen uw migratie werd afgerond, zijn nu allemaal aangekomen op %{pds}. Uw berichten, afbeeldingen en video's zijn compleet."
+      can_change_password: "U kunt het wachtwoord van uw account op %{pds} nu veilig wijzigen."
+      status_page: "Statuspagina van de migratie (beschikbaar totdat het migratierecord wordt verwijderd):"
+      support: "Als u hulp nodig hebt, neem dan contact op met de support en vermeld uw migratietoken:"
+
+    blobs_transfer_incomplete:
+      subject: "Bestanden die niet konden worden overgezet: %{count} (%{token})"
+      heading: "SOMMIGE BESTANDEN KONDEN NIET WORDEN OVERGEZET"
+      intro: "Aantal bestanden (afbeeldingen of video's) dat ondanks meerdere automatische pogingen niet naar %{pds} kon worden overgezet: %{count}. De betreffende berichten tonen kapotte afbeeldingen."
+      what_to_do: "Open de statuspagina en gebruik \"Mislukte bestanden opnieuw proberen\". Elke poging gebruikt de kopieën uit uw back-up, dus er gaat niets verloren. U ontvangt een laatste e-mail zodra alles is aangekomen:"
+      keep_password: "Wijzig tot die tijd het wachtwoord van uw account op %{pds} NIET — wijzigen breekt de overdracht definitief af."
+      support: "Als de pogingen blijven mislukken, neem dan contact op met de support en vermeld uw migratietoken:"
+
 
     migration_failed:
       subject: "Migratie mislukt - actie vereist (%{token})"
@@ -604,6 +641,7 @@ nl:
       key_warning: "Bewaar deze sleutel in een wachtwoordbeheerder of een andere veilige locatie. U kunt deze NIET later ophalen."
       next_step: "Ga naar de migratiepagina om uw PLC-bevestigingscode in te voeren:"
       check_email: "Controleer uw e-mail voor een code van uw oude PDS-provider — deze ziet eruit als XXXXX-XXXXX"
+      no_password_reset: "Belangrijk: log niet in op uw nieuwe account op %{pds} en reset daar het wachtwoord niet voordat deze migratie is afgerond. Het resetten van het wachtwoord maakt de inloggegevens die de migratie gebruikt ongeldig, en de migratie mislukt dan."
 
     plc_token_failed:
       subject: "Actie vereist: Vraag een nieuwe PLC-bevestigingscode aan (%{token})"

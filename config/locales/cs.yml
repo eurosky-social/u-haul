@@ -162,6 +162,7 @@ cs:
       confirm_email_access: "Potvrďte prosím, že máte přístup k této e-mailové adrese."
       # Step 3
       select_server: "Vyberte prosím server nebo zadejte URL vlastního serveru"
+      captcha_unsupported: "Tento server vyžaduje pro nové účty ověření telefonem nebo captcha, které odsud nelze dokončit. Nejprve si účet na tomto serveru založte, pak se vraťte a vyberte ho znovu — průvodce existující účet rozpozná."
       checking_server: "Kontrola serveru..."
       checking_requirements: "Kontrola požadavků serveru..."
       server_verified: "Server ověřen!"
@@ -233,6 +234,10 @@ cs:
       files: "soubory"
       data_transferred: "Přenesená data"
       failed: "Neúspěšné"
+      retry_failed_blobs: "Zopakovat neúspěšné soubory"
+      missing_files_title: "Dosud nepřenesené soubory: %{count}"
+      missing_files_detail: "Na pozadí se automaticky opakují, i po dokončení migrace, a můžete je zopakovat hned. V migraci můžete pokračovat; dotčené obrázky nebo videa se budou zobrazovat jako poškozené, dokud soubory nedorazí."
+      missing_files_completed: "Vaše migrace je dokončena, ale tyto soubory se stále přenášejí na pozadí. Dotčené obrázky nebo videa se zobrazují jako poškozené, dokud nedorazí. Můžete je také zopakovat hned. NEMĚŇTE heslo svého nového účtu, dokud neobdržíte náš závěrečný e-mail potvrzující, že všechny soubory dorazily — dřívější změna přenos přeruší."
       preparing_blobs: "Příprava na přenos <strong>%{count}</strong> blobů..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ cs:
       # PLC pending — header status
       status_waiting_for_you: "Čeká na váš vstup"
       progress_waiting_for_you: "Vyžadována akce — viz níže ↓"
+      last_updated: "Naposledy aktualizováno %{time}"
+      poll_error: "aktualizace se nezdařila — zkontrolujte připojení"
+      refresh_now: "Aktualizovat nyní"
 
       # PLC pending — action required banner
       action_required_title: "Vyžadována akce — Zkontrolujte svůj e-mail!"
@@ -344,6 +352,10 @@ cs:
       password_for: "Heslo pro %{handle}"
       enter_password_placeholder: "Zadejte heslo k účtu"
       reauth_button: "Znovu ověřit a pokračovat v migraci"
+      new_pds_reauth_safe: "Vaše migrační data jsou v bezpečí — přihlášení k novému účtu potřebuje jen aktuální heslo."
+      new_pds_reauth_help: "Heslo k vašemu novému účtu na <strong>%{pds}</strong> bylo odmítnuto. To se stane, když jste tam heslo resetovali, zatímco migrace čekala. Pro pokračování zadejte aktuální heslo k novému účtu."
+      new_pds_password_for: "Aktuální heslo k vašemu účtu na %{pds}"
+      new_pds_reauth_button: "Uložit heslo a pokračovat v migraci"
       plc_safe: "Vaše data migrace jsou v bezpečí — je pouze potřeba nový PLC token."
       plc_request_help: "Klikněte na tlačítko níže pro vyžádání nového PLC tokenu. Obdržíte jej e-mailem od <strong>%{pds}</strong>."
       request_plc_confirm: "Vyžádat nový PLC token od vašeho starého PDS?"
@@ -460,6 +472,11 @@ cs:
       tokens_missing: "Chybí ověřovací tokeny. Vraťte se prosím zpět a znovu se ověřte."
       account_not_found: "Na %{pds} nebyl nalezen žádný účet s vaším DID (%{did}). Vraťte se prosím zpět a vyberte jiný cílový PDS, nebo zahajte novou migraci."
       account_verify_failed: "Ověření existence účtu na %{pds} se nezdařilo: %{error}. Zkuste to prosím znovu."
+      invalid_target_host: "\"%{host}\" není platná adresa serveru. Vraťte se ke kroku 3 a vyberte nebo zadejte cílový server (například pds.example.com)."
+      target_host_is_handle: "\"%{host}\" je váš handle, ne adresa serveru. Vraťte se ke kroku 3 a vyberte cílový server znovu."
+      captcha_unsupported: "%{pds} vyžaduje pro nové účty ověření telefonem nebo captcha, které tento nástroj nedokáže dokončit. Nejprve si účet na tomto serveru založte, pak spusťte novou migraci a vyberte ho znovu."
+      new_pds_reauth_failed: "Přihlášení k vašemu účtu na %{pds} se nezdařilo: %{error}. Zkontrolujte heslo."
+      new_pds_reauth_success: "Heslo k vašemu účtu na %{pds} bylo uloženo. Nyní můžete odeslat potvrzovací kód PLC nebo požádat o nový."
       target_tokens_missing: "Chybí ověřovací tokeny cílového PDS. Vraťte se prosím zpět a ověřte své přihlašovací údaje na %{pds}."
       reauth_not_available: "Opětovné ověření není v této fázi dostupné."
       reauth_failed: "Ověření se nezdařilo: %{error}. Zkontrolujte prosím své heslo."
@@ -548,6 +565,9 @@ cs:
       hosting_miss: "Mnoho uživatelů tento krok vynechá — bez správného poskytovatele hostingu se nebudete moci přihlásit."
       change_password_heading: "ZMĚŇTE SI HESLO"
       change_password_help: "Pro vaši bezpečnost důrazně doporučujeme okamžitě si změnit heslo:"
+      missing_files_heading: "NĚKTERÉ SOUBORY SE STÁLE PŘENÁŠEJÍ"
+      missing_files_help: "Počet dosud nepřenesených souborů (obrázků nebo videí): %{count}. Na pozadí se automaticky opakují; dotčené příspěvky zobrazují poškozené obrázky, dokud soubory nedorazí. DŮLEŽITÉ: neměňte heslo svého nového účtu, dokud neobdržíte náš závěrečný e-mail potvrzující, že všechny soubory dorazily. Dřívější změna přenos přeruší. Průběh můžete sledovat a přenos zopakovat na stránce stavu:"
+      change_password_wait: "Toto heslo zatím NEMĚŇTE: některé z vašich souborů se stále přenášejí na pozadí a změna hesla by přenos přerušila. Počkejte na náš závěrečný e-mail potvrzující, že všechny soubory dorazily, a teprve pak ho změňte."
       change_password_later: "Můžete si jej také změnit později v nastavení účtu."
       whats_next: "CO SE STANE DÁLE?"
       next1: "Váš účet je nyní aktivní na %{pds}"
@@ -559,6 +579,23 @@ cs:
       privacy2: "Všechny šifrované přihlašovací údaje byly bezpečně vymazány z našich serverů"
       support: "Máte-li dotazy nebo problémy, kontaktujte prosím podporu s vaším tokenem migrace:"
       email_footer: "Tento e-mail byl odeslán na %{email}, protože jste zahájili migraci účtu."
+
+    blobs_transfer_complete:
+      subject: "Všechny soubory přeneseny — vaše migrace je zcela dokončena (%{token})"
+      heading: "VŠECHNY SOUBORY DORAZILY"
+      intro: "Soubory, které se při dokončení migrace ještě přenášely, nyní všechny dorazily na %{pds}. Vaše příspěvky, obrázky a videa jsou kompletní."
+      can_change_password: "Nyní můžete bezpečně změnit heslo svého účtu na %{pds}."
+      status_page: "Stránka stavu migrace (dostupná, dokud nebude záznam migrace smazán):"
+      support: "Pokud potřebujete pomoc, kontaktujte podporu a uveďte svůj migrační token:"
+
+    blobs_transfer_incomplete:
+      subject: "Soubory, které se nepodařilo přenést: %{count} (%{token})"
+      heading: "NĚKTERÉ SOUBORY SE NEPODAŘILO PŘENÉST"
+      intro: "Počet souborů (obrázků nebo videí), které se navzdory několika automatickým pokusům nepodařilo přenést na %{pds}: %{count}. Dotčené příspěvky zobrazují poškozené obrázky."
+      what_to_do: "Otevřete stránku stavu a použijte „Zopakovat neúspěšné soubory“. Každý pokus používá kopie z vaší zálohy, takže se nic neztratí. Jakmile vše dorazí, obdržíte závěrečný e-mail:"
+      keep_password: "Do té doby NEMĚŇTE heslo svého účtu na %{pds} — změna přenos definitivně přeruší."
+      support: "Pokud pokusy nadále selhávají, kontaktujte podporu a uveďte svůj migrační token:"
+
 
     migration_failed:
       subject: "Migrace se nezdařila – vyžadována akce (%{token})"
@@ -604,6 +641,7 @@ cs:
       key_warning: "Uložte tento klíč ve správci hesel nebo na jiném bezpečném místě. Později jej NEBUDETE moci znovu získat."
       next_step: "Přejděte na stránku migrace a zadejte PLC potvrzovací kód:"
       check_email: "Zkontrolujte svůj e-mail, zda neobsahuje kód od vašeho starého poskytovatele PDS — vypadá jako XXXXX-XXXXX"
+      no_password_reset: "Důležité: nepřihlašujte se k novému účtu na %{pds} ani tam neresetujte heslo, dokud tato migrace neskončí. Reset hesla zneplatní přihlašovací údaje, které migrace používá, a migrace selže."
 
     plc_token_failed:
       subject: "Vyžadována akce: Vyžádejte si nový PLC potvrzovací kód (%{token})"

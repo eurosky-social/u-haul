@@ -162,6 +162,7 @@ de:
       confirm_email_access: "Bitte bestätigen Sie, dass Sie Zugang zu dieser E-Mail-Adresse haben."
       # Step 3
       select_server: "Bitte wählen Sie einen Server aus oder geben Sie eine eigene Server-URL ein"
+      captcha_unsupported: "Dieser Server verlangt für neue Konten eine Telefon- oder Captcha-Verifizierung, die von hier aus nicht abgeschlossen werden kann. Legen Sie das Konto zuerst auf diesem Server an und wählen Sie ihn dann hier erneut aus — der Assistent erkennt das bestehende Konto."
       checking_server: "Server wird überprüft..."
       checking_requirements: "Serveranforderungen werden geprüft..."
       server_verified: "Server verifiziert!"
@@ -233,6 +234,10 @@ de:
       files: "Dateien"
       data_transferred: "Übertragene Daten"
       failed: "Fehlgeschlagen"
+      retry_failed_blobs: "Fehlgeschlagene Dateien erneut übertragen"
+      missing_files_title: "Noch nicht übertragene Dateien: %{count}"
+      missing_files_detail: "Sie werden im Hintergrund automatisch erneut übertragen, auch nach Abschluss der Migration, und Sie können es jetzt erneut versuchen. Sie können mit der Migration fortfahren; betroffene Bilder oder Videos erscheinen defekt, bis die Dateien angekommen sind."
+      missing_files_completed: "Ihre Migration ist abgeschlossen, aber diese Dateien werden noch im Hintergrund übertragen. Betroffene Bilder oder Videos erscheinen defekt, bis sie angekommen sind. Sie können es auch jetzt erneut versuchen. Ändern Sie das Passwort Ihres neuen Kontos NICHT, bevor Sie unsere abschließende E-Mail erhalten haben, die bestätigt, dass alle Dateien angekommen sind — eine frühere Änderung bricht die Übertragung ab."
       preparing_blobs: "Vorbereitung der Übertragung von <strong>%{count}</strong> Blobs..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ de:
       # PLC pending — header status
       status_waiting_for_you: "Wartet auf Ihre Eingabe"
       progress_waiting_for_you: "Aktion erforderlich — siehe unten ↓"
+      last_updated: "Zuletzt aktualisiert %{time}"
+      poll_error: "Aktualisierung fehlgeschlagen — prüfen Sie Ihre Verbindung"
+      refresh_now: "Jetzt aktualisieren"
 
       # PLC pending — action required banner
       action_required_title: "Aktion erforderlich — Prüfen Sie Ihre E-Mails!"
@@ -344,6 +352,10 @@ de:
       password_for: "Passwort für %{handle}"
       enter_password_placeholder: "Kontopasswort eingeben"
       reauth_button: "Erneut authentifizieren und Migration fortsetzen"
+      new_pds_reauth_safe: "Ihre Migrationsdaten sind sicher — für die Anmeldung bei Ihrem neuen Konto wird nur das aktuelle Passwort benötigt."
+      new_pds_reauth_help: "Das Passwort für Ihr neues Konto auf <strong>%{pds}</strong> wurde abgelehnt. Das passiert, wenn Sie das Passwort dort zurückgesetzt haben, während die Migration noch lief. Geben Sie das aktuelle Passwort Ihres neuen Kontos ein, um fortzufahren."
+      new_pds_password_for: "Aktuelles Passwort für Ihr Konto auf %{pds}"
+      new_pds_reauth_button: "Passwort speichern & Migration fortsetzen"
       plc_safe: "Ihre Migrationsdaten sind sicher — es wird lediglich ein neues PLC-Token benötigt."
       plc_request_help: "Klicken Sie auf die Schaltfläche unten, um ein neues PLC-Token anzufordern. Sie erhalten es per E-Mail von <strong>%{pds}</strong>."
       request_plc_confirm: "Neues PLC-Token von Ihrem alten PDS anfordern?"
@@ -460,6 +472,11 @@ de:
       tokens_missing: "Authentifizierungstoken fehlen. Bitte gehen Sie zurück und authentifizieren Sie sich erneut."
       account_not_found: "Kein Konto auf %{pds} mit Ihrer DID (%{did}) gefunden. Bitte gehen Sie zurück und wählen Sie einen anderen Ziel-PDS oder starten Sie eine neue Migration."
       account_verify_failed: "Überprüfung der Kontoexistenz auf %{pds} fehlgeschlagen: %{error}. Bitte versuchen Sie es erneut."
+      invalid_target_host: "\"%{host}\" ist keine gültige Serveradresse. Bitte gehen Sie zu Schritt 3 zurück und wählen Sie den Zielserver aus oder geben Sie ihn ein (zum Beispiel pds.example.com)."
+      target_host_is_handle: "\"%{host}\" ist Ihr Handle, keine Serveradresse. Bitte gehen Sie zu Schritt 3 zurück und wählen Sie den Zielserver erneut aus."
+      captcha_unsupported: "%{pds} verlangt für neue Konten eine Telefon- oder Captcha-Verifizierung, die dieses Werkzeug nicht abschließen kann. Legen Sie das Konto zuerst auf diesem Server an, starten Sie dann eine neue Migration und wählen Sie ihn erneut aus."
+      new_pds_reauth_failed: "Anmeldung bei Ihrem Konto auf %{pds} fehlgeschlagen: %{error}. Bitte prüfen Sie das Passwort."
+      new_pds_reauth_success: "Passwort für Ihr Konto auf %{pds} gespeichert. Sie können jetzt Ihren PLC-Bestätigungscode eingeben oder einen neuen anfordern."
       target_tokens_missing: "Authentifizierungstoken des Ziel-PDS fehlen. Bitte gehen Sie zurück und bestätigen Sie Ihre Zugangsdaten auf %{pds}."
       reauth_not_available: "Erneute Authentifizierung ist in dieser Phase nicht verfügbar."
       reauth_failed: "Authentifizierung fehlgeschlagen: %{error}. Bitte überprüfen Sie Ihr Passwort."
@@ -548,6 +565,9 @@ de:
       hosting_miss: "Viele Nutzer übersehen diesen Schritt — ohne den richtigen Hosting-Anbieter können Sie sich nicht anmelden."
       change_password_heading: "ÄNDERN SIE IHR PASSWORT"
       change_password_help: "Zu Ihrer Sicherheit empfehlen wir dringend, Ihr Passwort sofort zu ändern:"
+      missing_files_heading: "EINIGE DATEIEN WERDEN NOCH ÜBERTRAGEN"
+      missing_files_help: "Anzahl der noch nicht übertragenen Dateien (Bilder oder Videos): %{count}. Sie werden im Hintergrund automatisch erneut übertragen; betroffene Beiträge zeigen defekte Bilder, bis sie angekommen sind. WICHTIG: Ändern Sie das Passwort Ihres neuen Kontos nicht, bevor Sie unsere abschließende E-Mail erhalten haben, die bestätigt, dass alle Dateien angekommen sind. Eine frühere Änderung bricht die Übertragung ab. Fortschritt prüfen und erneut versuchen können Sie auf der Statusseite:"
+      change_password_wait: "Ändern Sie dieses Passwort noch NICHT: Einige Ihrer Dateien werden noch im Hintergrund übertragen, und eine Passwortänderung würde die Übertragung abbrechen. Warten Sie auf unsere abschließende E-Mail, die bestätigt, dass alle Dateien angekommen sind, und ändern Sie es dann."
       change_password_later: "Sie können es auch später in Ihren Kontoeinstellungen ändern."
       whats_next: "WAS PASSIERT ALS NÄCHSTES?"
       next1: "Ihr Konto ist jetzt auf %{pds} aktiv"
@@ -559,6 +579,23 @@ de:
       privacy2: "Alle verschlüsselten Zugangsdaten wurden sicher von unseren Servern gelöscht"
       support: "Bei Fragen oder Problemen wenden Sie sich bitte an den Support mit Ihrem Migrationstoken:"
       email_footer: "Diese E-Mail wurde an %{email} gesendet, weil Sie eine Kontomigration gestartet haben."
+
+    blobs_transfer_complete:
+      subject: "Alle Dateien übertragen — Ihre Migration ist vollständig abgeschlossen (%{token})"
+      heading: "ALLE DATEIEN SIND ANGEKOMMEN"
+      intro: "Die Dateien, die beim Abschluss Ihrer Migration noch übertragen wurden, sind jetzt alle auf %{pds} angekommen. Ihre Beiträge, Bilder und Videos sind vollständig."
+      can_change_password: "Sie können das Passwort Ihres Kontos auf %{pds} jetzt gefahrlos ändern."
+      status_page: "Statusseite der Migration (verfügbar, bis der Migrationsdatensatz gelöscht wird):"
+      support: "Wenn Sie Hilfe benötigen, wenden Sie sich an den Support und geben Sie Ihr Migrations-Token an:"
+
+    blobs_transfer_incomplete:
+      subject: "Nicht übertragbare Dateien: %{count} (%{token})"
+      heading: "EINIGE DATEIEN KONNTEN NICHT ÜBERTRAGEN WERDEN"
+      intro: "Anzahl der Dateien (Bilder oder Videos), die trotz mehrerer automatischer Versuche nicht nach %{pds} übertragen werden konnten: %{count}. Die betroffenen Beiträge zeigen defekte Bilder."
+      what_to_do: "Öffnen Sie die Statusseite und verwenden Sie „Fehlgeschlagene Dateien erneut übertragen“. Jeder Versuch nutzt die Kopien aus Ihrem Backup, es geht also nichts verloren. Sie erhalten eine abschließende E-Mail, sobald alles angekommen ist:"
+      keep_password: "Ändern Sie bis dahin das Passwort Ihres Kontos auf %{pds} NICHT — eine Änderung bricht die Übertragung endgültig ab."
+      support: "Wenn die Versuche weiterhin fehlschlagen, wenden Sie sich an den Support und geben Sie Ihr Migrations-Token an:"
+
 
     migration_failed:
       subject: "Migration fehlgeschlagen — Handlung erforderlich (%{token})"
@@ -604,6 +641,7 @@ de:
       key_warning: "Bewahren Sie diesen Schlüssel in einem Passwort-Manager oder an einem anderen sicheren Ort auf. Sie können ihn später NICHT erneut abrufen."
       next_step: "Gehen Sie zur Migrationsseite, um Ihren PLC-Bestätigungscode einzugeben:"
       check_email: "Überprüfen Sie Ihre E-Mails auf einen Code von Ihrem alten PDS-Anbieter — er sieht aus wie XXXXX-XXXXX"
+      no_password_reset: "Wichtig: Melden Sie sich nicht bei Ihrem neuen Konto auf %{pds} an und setzen Sie dort das Passwort nicht zurück, bevor diese Migration abgeschlossen ist. Ein Zurücksetzen des Passworts macht die von der Migration verwendeten Zugangsdaten ungültig, und die Migration schlägt fehl."
 
     plc_token_failed:
       subject: "Handlung erforderlich: Fordern Sie einen neuen PLC-Bestätigungscode an (%{token})"

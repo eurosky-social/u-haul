@@ -162,6 +162,7 @@ mt:
       confirm_email_access: "Jekk jogħġbok ikkonferma li għandek aċċess għal dan l-indirizz tal-email."
       # Step 3
       select_server: "Jekk jogħġbok agħżel Server jew daħħal URL ta' Server personalizzat"
+      captcha_unsupported: "Dan is-server jeħtieġ verifika bit-telefon jew captcha għal kontijiet ġodda, li ma tistax titlesta minn hawn. L-ewwel oħloq il-kont fuq dak is-server, imbagħad erġa' lura u erġa' agħżlu — il-wizard se jidentifika l-kont eżistenti."
       checking_server: "Qed jiċċekkja s-Server..."
       checking_requirements: "Qed jiċċekkja r-rekwiżiti tas-Server..."
       server_verified: "Server ivverifikat!"
@@ -233,6 +234,10 @@ mt:
       files: "fajls"
       data_transferred: "Data Ttrasferit"
       failed: "Fallut"
+      retry_failed_blobs: "Erġa' pprova l-fajls li fallew"
+      missing_files_title: "Fajls li għadhom ma ġewx trasferiti: %{count}"
+      missing_files_detail: "Jerġgħu jiġu ppruvati awtomatikament fl-isfond, anke wara li l-migrazzjoni tkun lesta, u tista' terġa' tippruvahom issa. Tista' tkompli bil-migrazzjoni; l-istampi jew il-vidjows affettwati jidhru mkissrin sakemm jaslu l-fajls."
+      missing_files_completed: "Il-migrazzjoni tiegħek lesta, iżda dawn il-fajls għadhom qed jiġu trasferiti fl-isfond. L-istampi jew il-vidjows affettwati jidhru mkissrin sakemm jaslu. Tista' wkoll terġa' tippruvahom issa. TIBDILX il-password tal-kont il-ġdid tiegħek qabel ma tirċievi l-email finali tagħna li tikkonferma li l-fajls kollha waslu — bidla qabel taqta' t-trasferiment."
       preparing_blobs: "Qed jipprepara biex jittrasferixxi <strong>%{count}</strong> blobs..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ mt:
       # PLC pending — header status
       status_waiting_for_you: "Qed jistenna r-risposta tiegħek"
       progress_waiting_for_you: "Azzjoni meħtieġa — ara hawn taħt ↓"
+      last_updated: "L-aħħar aġġornament %{time}"
+      poll_error: "ma setax jiġi aġġornat — iċċekkja l-konnessjoni tiegħek"
+      refresh_now: "Aġġorna issa"
 
       # PLC pending — action required banner
       action_required_title: "Azzjoni meħtieġa — Iċċekkja l-email tiegħek!"
@@ -344,6 +352,10 @@ mt:
       password_for: "Password għal %{handle}"
       enter_password_placeholder: "Daħħal il-password tal-kont tiegħek"
       reauth_button: "Erġa' Awtentika u Kompli l-Migrazzjoni"
+      new_pds_reauth_safe: "Id-data tal-migrazzjoni tiegħek hija sigura — il-login għall-kont il-ġdid tiegħek jeħtieġ biss il-password attwali."
+      new_pds_reauth_help: "Il-password tal-kont il-ġdid tiegħek fuq <strong>%{pds}</strong> ġiet irrifjutata. Dan jiġri jekk irrisettjajt il-password hemm waqt li l-migrazzjoni kienet pendenti. Daħħal il-password attwali tal-kont il-ġdid tiegħek biex tkompli."
+      new_pds_password_for: "Il-password attwali tal-kont tiegħek fuq %{pds}"
+      new_pds_reauth_button: "Issejvja l-password u kompli l-migrazzjoni"
       plc_safe: "Id-data tal-migrazzjoni tiegħek hija sigura — teħtieġ biss token PLC ġdid."
       plc_request_help: "Agħfas il-buttuna hawn taħt biex titlob token PLC ġdid. Se tirċevieh permezz tal-email minn <strong>%{pds}</strong>."
       request_plc_confirm: "Itlob token PLC ġdid mill-PDS l-antik tiegħek?"
@@ -460,6 +472,11 @@ mt:
       tokens_missing: "It-tokens tal-awtentikazzjoni huma neqsin. Jekk jogħġbok mur lura u erġa' awtentika."
       account_not_found: "L-ebda kont instab fuq %{pds} bid-DID tiegħek (%{did}). Jekk jogħġbok mur lura u agħżel PDS fil-mira differenti, jew ibda migrazzjoni ġdida."
       account_verify_failed: "Ma rnexxiex tivverifika l-eżistenza tal-kont fuq %{pds}: %{error}. Jekk jogħġbok erġa' pprova."
+      invalid_target_host: "\"%{host}\" mhuwiex indirizz validu ta' server. Erġa' lura għall-pass 3 u agħżel jew daħħal is-server tad-destinazzjoni (pereżempju pds.example.com)."
+      target_host_is_handle: "\"%{host}\" huwa l-handle tiegħek, mhux indirizz ta' server. Erġa' lura għall-pass 3 u erġa' agħżel is-server tad-destinazzjoni."
+      captcha_unsupported: "%{pds} jeħtieġ verifika bit-telefon jew captcha għal kontijiet ġodda, li din l-għodda ma tistax tlesti. L-ewwel oħloq il-kont fuq dak is-server, imbagħad ibda migrazzjoni ġdida u erġa' agħżlu."
+      new_pds_reauth_failed: "Ma setax isir login fil-kont tiegħek fuq %{pds}: %{error}. Iċċekkja l-password."
+      new_pds_reauth_success: "Il-password tal-kont tiegħek fuq %{pds} ġiet issejvjata. Issa tista' tissottometti l-kodiċi ta' konferma PLC tiegħek jew titlob wieħed ġdid."
       target_tokens_missing: "It-tokens tal-awtentikazzjoni tal-PDS fil-mira huma neqsin. Jekk jogħġbok mur lura u ivverifika l-kredenzjali tiegħek fuq %{pds}."
       reauth_not_available: "L-awtentikazzjoni mill-ġdid mhijiex disponibbli f'dan l-istadju."
       reauth_failed: "L-awtentikazzjoni falliet: %{error}. Jekk jogħġbok iċċekkja l-password tiegħek."
@@ -548,6 +565,9 @@ mt:
       hosting_miss: "Ħafna utenti jaqbżu dan il-pass — mingħajr il-fornitur tal-hosting korrett, mhux se tkun tista' tidħol."
       change_password_heading: "BIDDEL IL-PASSWORD TIEGĦEK"
       change_password_help: "Għas-sigurta tiegħek, nirrakkomandaw bis-sħiħ li tbiddel il-password tiegħek immedjatament:"
+      missing_files_heading: "XI FAJLS GĦADHOM QED JIĠU TRASFERITI"
+      missing_files_help: "Numru ta' fajls (stampi jew vidjows) li għadhom ma ġewx trasferiti: %{count}. Jerġgħu jiġu ppruvati awtomatikament fl-isfond; il-posts affettwati juru stampi mkissrin sakemm jaslu. IMPORTANTI: tibdilx il-password tal-kont il-ġdid tiegħek qabel ma tirċievi l-email finali tagħna li tikkonferma li l-fajls kollha waslu. Bidla qabel taqta' t-trasferiment. Tista' ssegwi l-progress u terġa' tipprova fil-paġna tal-istatus:"
+      change_password_wait: "TIBDILX din il-password għalissa: xi fajls tiegħek għadhom qed jiġu trasferiti fl-isfond, u bidla fil-password taqta' t-trasferiment. Stenna l-email finali tagħna li tikkonferma li l-fajls kollha waslu, imbagħad ibdilha."
       change_password_later: "Tista' wkoll tbiddilha aktar tard fis-settings tal-kont tiegħek."
       whats_next: "X'JIĠRI WARA?"
       next1: "Il-kont tiegħek issa huwa attiv fuq %{pds}"
@@ -559,6 +579,23 @@ mt:
       privacy2: "Il-kredenzjali ikriptjati kollha tħassru b'mod sigur mis-servers tagħna"
       support: "Jekk għandek mistoqsijiet jew problemi, jekk jogħġbok ikkuntattja s-sapport bit-token tal-migrazzjoni tiegħek:"
       email_footer: "Dan l-email intbagħat lil %{email} għax bdejt migrazzjoni ta' kont."
+
+    blobs_transfer_complete:
+      subject: "Il-fajls kollha ġew trasferiti — il-migrazzjoni tiegħek lesta għalkollox (%{token})"
+      heading: "IL-FAJLS KOLLHA WASLU"
+      intro: "Il-fajls li kienu għadhom qed jiġu trasferiti meta l-migrazzjoni tiegħek tlestiet issa waslu kollha fuq %{pds}. Il-posts, l-istampi u l-vidjows tiegħek huma kompluti."
+      can_change_password: "Issa tista' tibdel bla periklu l-password tal-kont tiegħek fuq %{pds}."
+      status_page: "Il-paġna tal-istatus tal-migrazzjoni (disponibbli sakemm jitħassar ir-rekord tal-migrazzjoni):"
+      support: "Jekk teħtieġ għajnuna, ikkuntattja s-sapport u inkludi t-token tal-migrazzjoni tiegħek:"
+
+    blobs_transfer_incomplete:
+      subject: "Fajls li ma setgħux jiġu trasferiti: %{count} (%{token})"
+      heading: "XI FAJLS MA SETGĦUX JIĠU TRASFERITI"
+      intro: "Numru ta' fajls (stampi jew vidjows) li ma setgħux jiġu trasferiti lejn %{pds} minkejja diversi tentattivi awtomatiċi: %{count}. Il-posts affettwati juru stampi mkissrin."
+      what_to_do: "Iftaħ il-paġna tal-istatus u uża \"Erġa' pprova l-fajls li fallew\". Kull tentattiv juża l-kopji mill-backup tiegħek, allura xejn ma jintilef. Tirċievi email finali meta kollox ikun wasal:"
+      keep_password: "Sa dak iż-żmien, TIBDILX il-password tal-kont tiegħek fuq %{pds} — bidla taqta' t-trasferiment għalkollox."
+      support: "Jekk it-tentattivi jibqgħu jfallu, ikkuntattja s-sapport u inkludi t-token tal-migrazzjoni tiegħek:"
+
 
     migration_failed:
       subject: "Il-Migrazzjoni Falliet - Azzjoni Meħtieġa (%{token})"
@@ -604,6 +641,7 @@ mt:
       key_warning: "Aħżen din iċ-ċavetta f'maniġer tal-passwords jew post sigur ieħor. MHUX se tkun tista' tirkupraha aktar tard."
       next_step: "Mur għall-paġna tal-migrazzjoni biex iddaħħal il-kodiċi ta' konferma PLC tiegħek:"
       check_email: "Iċċekkja l-email tiegħek għal kodiċi mill-fornitur tal-PDS l-antik tiegħek — jidher bħal XXXXX-XXXXX"
+      no_password_reset: "Importanti: tagħmilx login fil-kont il-ġdid tiegħek fuq %{pds} u tirrisettjax il-password hemm qabel ma din il-migrazzjoni tkun lesta. Ir-risettjar tal-password jinvalida l-kredenzjali li tuża l-migrazzjoni, u din tfalli."
 
     plc_token_failed:
       subject: "Azzjoni Meħtieġa: Itlob Kodiċi ta' Konferma PLC Ġdid (%{token})"

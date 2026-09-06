@@ -162,6 +162,7 @@ sl:
       confirm_email_access: "Prosimo, potrdite, da imate dostop do tega e-poštnega naslova."
       # Step 3
       select_server: "Prosimo, izberite strežnik ali vnesite URL strežnika po meri"
+      captcha_unsupported: "Ta strežnik za nove račune zahteva preverjanje s telefonom ali captcha, ki ga od tu ni mogoče dokončati. Najprej ustvarite račun na tem strežniku, nato se vrnite in ga znova izberite — čarovnik bo zaznal obstoječi račun."
       checking_server: "Preverjanje strežnika..."
       checking_requirements: "Preverjanje zahtev strežnika..."
       server_verified: "Strežnik preverjen!"
@@ -233,6 +234,10 @@ sl:
       files: "datoteke"
       data_transferred: "Preneseni podatki"
       failed: "Neuspeli"
+      retry_failed_blobs: "Znova poskusi z neuspelimi datotekami"
+      missing_files_title: "Še neprenesene datoteke: %{count}"
+      missing_files_detail: "V ozadju se samodejno znova poskušajo, tudi po zaključku selitve, in lahko jih poskusite zdaj. S selitvijo lahko nadaljujete; prizadete slike ali videoposnetki so videti pokvarjeni, dokler datoteke ne prispejo."
+      missing_files_completed: "Vaša selitev je zaključena, vendar se te datoteke še prenašajo v ozadju. Prizadete slike ali videoposnetki so videti pokvarjeni, dokler ne prispejo. Lahko jih poskusite tudi zdaj. NE spreminjajte gesla novega računa, dokler ne prejmete našega zaključnega e-sporočila, ki potrjuje, da so prispele vse datoteke — zgodnejša sprememba prekine prenos."
       preparing_blobs: "Priprava <strong>%{count}</strong> blobov za prenos..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ sl:
       # PLC pending — header status
       status_waiting_for_you: "Čaka na vaš vnos"
       progress_waiting_for_you: "Zahtevano dejanje — glejte spodaj ↓"
+      last_updated: "Nazadnje posodobljeno %{time}"
+      poll_error: "osvežitev ni uspela — preverite povezavo"
+      refresh_now: "Osveži zdaj"
 
       # PLC pending — action required banner
       action_required_title: "Zahtevano dejanje — Preverite svojo e-pošto!"
@@ -344,6 +352,10 @@ sl:
       password_for: "Geslo za %{handle}"
       enter_password_placeholder: "Vnesite geslo računa"
       reauth_button: "Ponovna avtentikacija in nadaljevanje selitve"
+      new_pds_reauth_safe: "Vaši podatki o selitvi so varni — za prijavo v nov račun je potrebno le trenutno geslo."
+      new_pds_reauth_help: "Geslo vašega novega računa na <strong>%{pds}</strong> je bilo zavrnjeno. To se zgodi, če ste tam ponastavili geslo, medtem ko je selitev čakala. Za nadaljevanje vnesite trenutno geslo novega računa."
+      new_pds_password_for: "Trenutno geslo vašega računa na %{pds}"
+      new_pds_reauth_button: "Shrani geslo in nadaljuj selitev"
       plc_safe: "Vaši podatki o selitvi so varni — potrebujete le svež žeton PLC."
       plc_request_help: "Kliknite spodnji gumb za zahtevo novega žetona PLC. Prejeli ga boste po e-pošti od <strong>%{pds}</strong>."
       request_plc_confirm: "Zahtevaj nov žeton PLC od vašega starega PDS?"
@@ -460,6 +472,11 @@ sl:
       tokens_missing: "Žetoni za avtentikacijo manjkajo. Prosimo, vrnite se in se znova avtenticirajte."
       account_not_found: "Na %{pds} ni bil najden noben račun z vašim DID (%{did}). Prosimo, vrnite se in izberite drug ciljni PDS ali začnite novo selitev."
       account_verify_failed: "Obstoja računa na %{pds} ni bilo mogoče preveriti: %{error}. Prosimo, poskusite znova."
+      invalid_target_host: "\"%{host}\" ni veljaven naslov strežnika. Vrnite se na 3. korak in izberite ali vnesite ciljni strežnik (na primer pds.example.com)."
+      target_host_is_handle: "\"%{host}\" je vaš handle, ne naslov strežnika. Vrnite se na 3. korak in znova izberite ciljni strežnik."
+      captcha_unsupported: "%{pds} za nove račune zahteva preverjanje s telefonom ali captcha, ki ga to orodje ne more dokončati. Najprej ustvarite račun na tem strežniku, nato začnite novo selitev in ga znova izberite."
+      new_pds_reauth_failed: "Prijava v vaš račun na %{pds} ni uspela: %{error}. Preverite geslo."
+      new_pds_reauth_success: "Geslo vašega računa na %{pds} je shranjeno. Zdaj lahko pošljete potrditveno kodo PLC ali zahtevate novo."
       target_tokens_missing: "Žetoni za avtentikacijo ciljnega PDS manjkajo. Prosimo, vrnite se in preverite poverilnice na %{pds}."
       reauth_not_available: "Ponovna avtentikacija v tej fazi ni na voljo."
       reauth_failed: "Avtentikacija neuspešna: %{error}. Prosimo, preverite geslo."
@@ -548,6 +565,9 @@ sl:
       hosting_miss: "Mnogi uporabniki ta korak spregledajo — brez pravilnega ponudnika gostovanja se ne boste mogli prijaviti."
       change_password_heading: "SPREMENITE GESLO"
       change_password_help: "Za vašo varnost vam močno priporočamo, da takoj spremenite geslo:"
+      missing_files_heading: "NEKATERE DATOTEKE SE ŠE PRENAŠAJO"
+      missing_files_help: "Število še neprenesenih datotek (slik ali videoposnetkov): %{count}. V ozadju se samodejno znova poskušajo; prizadete objave prikazujejo pokvarjene slike, dokler ne prispejo. POMEMBNO: ne spreminjajte gesla novega računa, dokler ne prejmete našega zaključnega e-sporočila, ki potrjuje, da so prispele vse datoteke. Zgodnejša sprememba prekine prenos. Napredek lahko spremljate in znova poskusite na strani s stanjem:"
+      change_password_wait: "Tega gesla še NE spreminjajte: nekatere vaše datoteke se še prenašajo v ozadju in sprememba gesla bi prekinila prenos. Počakajte na naše zaključno e-sporočilo, ki potrjuje, da so prispele vse datoteke, in ga nato spremenite."
       change_password_later: "Spremenite ga lahko tudi pozneje v nastavitvah računa."
       whats_next: "KAJ SLEDI?"
       next1: "Vaš račun je zdaj aktiven na %{pds}"
@@ -559,6 +579,23 @@ sl:
       privacy2: "Vse šifrirane poverilnice so bile varno izbrisane z naših strežnikov"
       support: "Če imate vprašanja ali težave, kontaktirajte podporo s svojim žetonom selitve:"
       email_footer: "Ta e-pošta je bila poslana na %{email}, ker ste sprožili selitev računa."
+
+    blobs_transfer_complete:
+      subject: "Vse datoteke prenesene — vaša selitev je v celoti zaključena (%{token})"
+      heading: "VSE DATOTEKE SO PRISPELE"
+      intro: "Datoteke, ki so se ob zaključku selitve še prenašale, so zdaj vse prispele na %{pds}. Vaše objave, slike in videoposnetki so popolni."
+      can_change_password: "Zdaj lahko varno spremenite geslo svojega računa na %{pds}."
+      status_page: "Stran s stanjem selitve (na voljo, dokler se zapis o selitvi ne izbriše):"
+      support: "Če potrebujete pomoč, se obrnite na podporo in navedite svoj selitveni žeton:"
+
+    blobs_transfer_incomplete:
+      subject: "Datoteke, ki jih ni bilo mogoče prenesti: %{count} (%{token})"
+      heading: "NEKATERIH DATOTEK NI BILO MOGOČE PRENESTI"
+      intro: "Število datotek (slik ali videoposnetkov), ki jih kljub več samodejnim poskusom ni bilo mogoče prenesti na %{pds}: %{count}. Prizadete objave prikazujejo pokvarjene slike."
+      what_to_do: "Odprite stran s stanjem in uporabite »Znova poskusi z neuspelimi datotekami«. Vsak poskus uporablja kopije iz vaše varnostne kopije, zato se nič ne izgubi. Ko vse prispe, boste prejeli zaključno e-sporočilo:"
+      keep_password: "Do takrat NE spreminjajte gesla svojega računa na %{pds} — sprememba dokončno prekine prenos."
+      support: "Če poskusi še naprej ne uspevajo, se obrnite na podporo in navedite svoj selitveni žeton:"
+
 
     migration_failed:
       subject: "Selitev neuspešna - Zahtevano je ukrepanje (%{token})"
@@ -604,6 +641,7 @@ sl:
       key_warning: "Shranite ta ključ v upravitelju gesel ali na drugem varnem mestu. Pozneje ga NE boste mogli pridobiti."
       next_step: "Pojdite na stran selitve za vnos potrditvene kode PLC:"
       check_email: "Preverite e-pošto za kodo od vašega starega ponudnika PDS — videti je kot XXXXX-XXXXX"
+      no_password_reset: "Pomembno: ne prijavljajte se v nov račun na %{pds} in tam ne ponastavljajte gesla, dokler ta selitev ni zaključena. Ponastavitev gesla razveljavi poverilnice, ki jih selitev uporablja, in selitev ne bo uspela."
 
     plc_token_failed:
       subject: "Zahtevano je ukrepanje: Zahtevajte novo potrditveno kodo PLC (%{token})"

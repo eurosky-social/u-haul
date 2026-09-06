@@ -162,6 +162,7 @@ lv:
       confirm_email_access: "Lūdzu, apstipriniet, ka jums ir piekļuve šai e-pasta adresei."
       # Step 3
       select_server: "Izvēlieties serveri vai ievadiet pielāgota servera URL"
+      captcha_unsupported: "Šis serveris jauniem kontiem pieprasa pārbaudi pa tālruni vai captcha, ko no šejienes nevar pabeigt. Vispirms izveidojiet kontu tajā serverī, pēc tam atgriezieties un izvēlieties to vēlreiz — vednis atpazīs esošo kontu."
       checking_server: "Servera pārbaude..."
       checking_requirements: "Servera prasību pārbaude..."
       server_verified: "Serveris verificēts!"
@@ -233,6 +234,10 @@ lv:
       files: "faili"
       data_transferred: "Pārsūtīti dati"
       failed: "Neizdevās"
+      retry_failed_blobs: "Mēģināt neizdevušos failus vēlreiz"
+      missing_files_title: "Vēl nepārsūtītie faili: %{count}"
+      missing_files_detail: "Tie tiek automātiski mēģināti vēlreiz fonā, arī pēc migrācijas pabeigšanas, un jūs varat mēģināt vēlreiz tagad. Varat turpināt migrāciju; skartie attēli vai video izskatās bojāti, līdz faili ir saņemti."
+      missing_files_completed: "Jūsu migrācija ir pabeigta, taču šie faili joprojām tiek pārsūtīti fonā. Skartie attēli vai video izskatās bojāti, līdz tie ir saņemti. Varat arī mēģināt vēlreiz tagad. NEMAINIET jaunā konta paroli, kamēr nesaņemat mūsu noslēguma e-pastu, kas apstiprina, ka visi faili ir saņemti — agrāka maiņa pārtrauc pārsūtīšanu."
       preparing_blobs: "Gatavošanās <strong>%{count}</strong> blob pārsūtīšanai..."
 
       # Download/backup progress
@@ -247,6 +252,9 @@ lv:
       # PLC pending — header status
       status_waiting_for_you: "Gaida jūsu atbildi"
       progress_waiting_for_you: "Nepieciešama darbība — skatiet zemāk ↓"
+      last_updated: "Pēdējo reizi atjaunināts %{time}"
+      poll_error: "neizdevās atjaunināt — pārbaudiet savienojumu"
+      refresh_now: "Atjaunināt tagad"
 
       # PLC pending — action required banner
       action_required_title: "Nepieciešama darbība — Pārbaudiet savu e-pastu!"
@@ -344,6 +352,10 @@ lv:
       password_for: "Parole %{handle}"
       enter_password_placeholder: "Ievadiet konta paroli"
       reauth_button: "Atkārtoti autentificēties un turpināt migrāciju"
+      new_pds_reauth_safe: "Jūsu migrācijas dati ir drošībā — pieteikšanās jaunajā kontā prasa tikai pašreizējo paroli."
+      new_pds_reauth_help: "Jūsu jaunā konta parole serverī <strong>%{pds}</strong> tika noraidīta. Tā notiek, ja tur atiestatījāt paroli, kamēr migrācija gaidīja. Lai turpinātu, ievadiet jaunā konta pašreizējo paroli."
+      new_pds_password_for: "Jūsu konta pašreizējā parole serverī %{pds}"
+      new_pds_reauth_button: "Saglabāt paroli un turpināt migrāciju"
       plc_safe: "Jūsu migrācijas dati ir drošībā — vienkārši nepieciešams jauns PLC žetons."
       plc_request_help: "Noklikšķiniet zemāk esošo pogu, lai pieprasītu jaunu PLC žetonu. Jūs to saņemsiet e-pastā no <strong>%{pds}</strong>."
       request_plc_confirm: "Pieprasīt jaunu PLC žetonu no jūsu vecā PDS?"
@@ -460,6 +472,11 @@ lv:
       tokens_missing: "Trūkst autentifikācijas žetonu. Lūdzu, atgriezieties un atkārtoti autentificējieties."
       account_not_found: "Konts ar jūsu DID (%{did}) nav atrasts %{pds}. Lūdzu, atgriezieties un izvēlieties citu galamērķa PDS vai sāciet jaunu migrāciju."
       account_verify_failed: "Neizdevās pārbaudīt konta esamību %{pds}: %{error}. Lūdzu, mēģiniet vēlreiz."
+      invalid_target_host: "\"%{host}\" nav derīga servera adrese. Atgriezieties 3. solī un izvēlieties vai ievadiet mērķa serveri (piemēram, pds.example.com)."
+      target_host_is_handle: "\"%{host}\" ir jūsu lietotājvārds (handle), nevis servera adrese. Atgriezieties 3. solī un vēlreiz izvēlieties mērķa serveri."
+      captcha_unsupported: "%{pds} jauniem kontiem pieprasa pārbaudi pa tālruni vai captcha, ko šis rīks nevar pabeigt. Vispirms izveidojiet kontu tajā serverī, pēc tam sāciet jaunu migrāciju un izvēlieties to vēlreiz."
+      new_pds_reauth_failed: "Neizdevās pieteikties jūsu kontā serverī %{pds}: %{error}. Pārbaudiet paroli."
+      new_pds_reauth_success: "Jūsu konta parole serverī %{pds} ir saglabāta. Tagad varat iesniegt PLC apstiprinājuma kodu vai pieprasīt jaunu."
       target_tokens_missing: "Trūkst galamērķa PDS autentifikācijas žetonu. Lūdzu, atgriezieties un apstipriniet savus pieteikšanās datus %{pds}."
       reauth_not_available: "Atkārtota autentifikācija šajā posmā nav pieejama."
       reauth_failed: "Autentifikācija neizdevās: %{error}. Lūdzu, pārbaudiet paroli."
@@ -548,6 +565,9 @@ lv:
       hosting_miss: "Daudzi lietotāji izlaiž šo soli — bez pareizā hostinga nodrošinātāja jūs nevarēsiet pieteikties."
       change_password_heading: "NOMAINIET PAROLI"
       change_password_help: "Jūsu drošībai mēs stingri iesakām nekavējoties nomainīt paroli:"
+      missing_files_heading: "DAŽI FAILI JOPROJĀM TIEK PĀRSŪTĪTI"
+      missing_files_help: "Vēl nepārsūtīto failu (attēlu vai video) skaits: %{count}. Tie tiek automātiski mēģināti vēlreiz fonā; skartajos ierakstos redzami bojāti attēli, līdz faili ir saņemti. SVARĪGI: nemainiet jaunā konta paroli, kamēr nesaņemat mūsu noslēguma e-pastu, kas apstiprina, ka visi faili ir saņemti. Agrāka maiņa pārtrauc pārsūtīšanu. Progresu varat sekot un mēģināt vēlreiz statusa lapā:"
+      change_password_wait: "Pagaidām NEMAINIET šo paroli: daži jūsu faili joprojām tiek pārsūtīti fonā, un paroles maiņa pārtrauktu pārsūtīšanu. Sagaidiet mūsu noslēguma e-pastu, kas apstiprina, ka visi faili ir saņemti, un tad to nomainiet."
       change_password_later: "Varat to nomainīt arī vēlāk konta iestatījumos."
       whats_next: "KAS NOTIKS TĀLĀK?"
       next1: "Jūsu konts tagad ir aktīvs %{pds}"
@@ -559,6 +579,23 @@ lv:
       privacy2: "Visi šifrētie pieteikšanās dati ir droši dzēsti no mūsu serveriem"
       support: "Ja jums ir jautājumi vai problēmas, lūdzu, sazinieties ar atbalsta dienestu, norādot migrācijas žetonu:"
       email_footer: "Šis e-pasts tika nosūtīts uz %{email}, jo jūs uzsākāt konta migrāciju."
+
+    blobs_transfer_complete:
+      subject: "Visi faili pārsūtīti — jūsu migrācija ir pilnībā pabeigta (%{token})"
+      heading: "VISI FAILI IR SAŅEMTI"
+      intro: "Faili, kas migrācijas pabeigšanas brīdī vēl tika pārsūtīti, tagad visi ir saņemti serverī %{pds}. Jūsu ieraksti, attēli un video ir pilnīgi."
+      can_change_password: "Tagad varat droši nomainīt sava konta paroli serverī %{pds}."
+      status_page: "Migrācijas statusa lapa (pieejama, līdz migrācijas ieraksts tiek dzēsts):"
+      support: "Ja nepieciešama palīdzība, sazinieties ar atbalstu un norādiet savu migrācijas žetonu:"
+
+    blobs_transfer_incomplete:
+      subject: "Faili, kurus neizdevās pārsūtīt: %{count} (%{token})"
+      heading: "DAŽUS FAILUS NEIZDEVĀS PĀRSŪTĪT"
+      intro: "Failu (attēlu vai video) skaits, kurus, neraugoties uz vairākiem automātiskiem mēģinājumiem, neizdevās pārsūtīt uz %{pds}: %{count}. Skartajos ierakstos redzami bojāti attēli."
+      what_to_do: "Atveriet statusa lapu un izmantojiet „Mēģināt neizdevušos failus vēlreiz“. Katrs mēģinājums izmanto kopijas no jūsu rezerves kopijas, tāpēc nekas nepazūd. Kad viss būs saņemts, jūs saņemsiet noslēguma e-pastu:"
+      keep_password: "Līdz tam NEMAINIET sava konta paroli serverī %{pds} — maiņa pārtrauc pārsūtīšanu neatgriezeniski."
+      support: "Ja mēģinājumi turpina neizdoties, sazinieties ar atbalstu un norādiet savu migrācijas žetonu:"
+
 
     migration_failed:
       subject: "Migrācija neizdevās - nepieciešama darbība (%{token})"
@@ -604,6 +641,7 @@ lv:
       key_warning: "Glabājiet šo atslēgu paroļu pārvaldniekā vai citā drošā vietā. Jūs NEVARĒSIET to iegūt vēlāk."
       next_step: "Dodieties uz migrācijas lapu, lai ievadītu PLC apstiprinājuma kodu:"
       check_email: "Pārbaudiet e-pastu, lai iegūtu kodu no vecā PDS nodrošinātāja — tas izskatās šādi: XXXXX-XXXXX"
+      no_password_reset: "Svarīgi: nepiesakieties jaunajā kontā serverī %{pds} un neatiestatiet tur paroli, kamēr šī migrācija nav pabeigta. Paroles atiestatīšana padara nederīgus migrācijas izmantotos akreditācijas datus, un migrācija neizdosies."
 
     plc_token_failed:
       subject: "Nepieciešama darbība: Pieprasiet jaunu PLC apstiprinājuma kodu (%{token})"
