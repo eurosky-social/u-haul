@@ -109,7 +109,7 @@ blob_transfer_summary {"migration_id":123,"job":"UploadBlobsJob","pass":"paralle
 ```
 
 ```logql
-{container_name=~"eurosky-sidekiq.*"}
+{service_name="eurosky-sidekiq"}
   |= "blob_transfer_summary"
   | regexp "blob_transfer_summary (?P<payload>\\{.*\\})"
   | line_format "{{.payload}}" | json
@@ -120,12 +120,26 @@ Two things worth knowing about that query:
 
 - The Rails logger prefixes each line with severity and timestamp, so the JSON
   has to be extracted before `| json` will parse it — hence the `regexp` step.
-- Match on `container_name`, not `service_name`. Alloy derives `service_name`
-  from the journald container tag, and the euhaul compose sets no `tag:`
-  log-opt, so Docker falls back to the container ID. `container_name` is
-  `eurosky-sidekiq-<partition>` and is the dependable label. (Blob passes run
-  on the `migrations` queue, so they are in the plain sidekiq container, not
-  `eurosky-sidekiq-critical`.)
+- Blob passes run on the `migrations` queue, so they are in the plain sidekiq
+  container, not `eurosky-sidekiq-critical`.
+
+This pipeline is not automatic — it exists only because the euhaul host ships
+its journal. That took three changes in `eurosky-infra`, all on the
+`fix/blob-transfer-bugs` branch there:
+
+| Change | Why |
+|---|---|
+| `alloy` + `journald` roles added to `playbooks/site/euhaul.yml` | The host ran neither; nothing left the box |
+| `alloy_push_*` / `alloy_loki_url` in `group_vars/identity_euhaul` | Endpoints, pointed at the platform log store |
+| `tag:identity-euhaul` added to `telemetry_shipper_tags` | Tailscale ACL: without it the shipper is installed but blocked |
+
+The euhaul compose also now sets a journald `tag:` log-opt per service. Without
+it Docker defaults the tag to the container ID, which is what Alloy relabels
+into `service_name` — so the label would have been a hex string.
+
+Until that infra branch is merged and the host converged, this section
+describes something that does not exist yet: use the rake tasks and SQL above,
+which read the database directly and need no pipeline at all.
 
 ## Retention
 
