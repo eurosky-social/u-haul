@@ -19,11 +19,16 @@ RSpec.describe UploadBlobsJob, type: :job do
     )
   end
 
+  after { BlobTransferStat.delete_all }
+
   let(:goat_service) { instance_double(GoatService) }
   let(:blob_cids) { ['bafyabc123', 'bafydef456', 'bafyghi789'] }
 
   before do
     allow(GoatService).to receive(:new).with(migration).and_return(goat_service)
+    # Blob passes label their stats with the version the target PDS reports,
+    # so the double has to answer for it.
+    allow(goat_service).to receive(:target_pds_version).and_return('0.5.29')
     allow(goat_service).to receive(:login_new_pds)
     # Skip retry backoffs and the second-pass breather
     allow_any_instance_of(described_class).to receive(:pause)
@@ -74,6 +79,21 @@ RSpec.describe UploadBlobsJob, type: :job do
         end
 
         described_class.perform_now(migration.id)
+      end
+
+      # The durable record of the pass: the log line rotates away, this does not.
+      it 'records a blob transfer stat for the pass' do
+        described_class.perform_now(migration.id)
+
+        stat = BlobTransferStat.find_by(migration_id: migration.id, pass: 'parallel')
+        expect(stat).to have_attributes(
+          job_name: 'UploadBlobsJob',
+          target_pds_version: '0.5.29',
+          blobs_attempted: blob_cids.length,
+          blobs_succeeded: blob_cids.length,
+          blobs_failed: 0
+        )
+        expect(stat.bytes_transferred).to be > 0
       end
 
       it 'tracks upload progress' do

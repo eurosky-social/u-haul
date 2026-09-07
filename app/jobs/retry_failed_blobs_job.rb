@@ -47,6 +47,11 @@ class RetryFailedBlobsJob < ApplicationJob
     # Login to new PDS for uploads
     goat.login_new_pds
 
+    # Measure this pass. Retry passes run against a PDS that already refused
+    # these blobs once, so their success rate is the interesting one: it says
+    # whether the target recovered or is still bad.
+    start_blob_pass(migration, pass: BlobTransferTelemetry::PASS_RETRY, goat: goat)
+
     # Track results
     successful_cids = []
     still_failed_cids = []
@@ -125,6 +130,8 @@ class RetryFailedBlobsJob < ApplicationJob
     logger.error("Failed blob retry job failed for migration #{migration_id}: #{e.message}")
     logger.error(e.backtrace.join("\n"))
     raise
+  ensure
+    finish_blob_pass
   end
 
   private
@@ -139,7 +146,7 @@ class RetryFailedBlobsJob < ApplicationJob
 
   # Download blob with retry logic
   def download_blob_with_retry(goat, cid, attempt = 1)
-    goat.download_blob(cid)
+    measure(cid: cid, phase: :download) { goat.download_blob(cid) }
   rescue GoatService::RateLimitError => e
     if attempt < MAX_BLOB_RETRIES
       backoff = 2 ** (attempt + 2) # Longer backoff for rate limits: 8s, 16s, 32s
@@ -163,7 +170,9 @@ class RetryFailedBlobsJob < ApplicationJob
 
   # Upload blob with retry logic
   def upload_blob_with_retry(goat, blob_path, attempt = 1)
-    goat.upload_blob(blob_path)
+    measure(cid: File.basename(blob_path.to_s), bytes: file_size(blob_path)) do
+      goat.upload_blob(blob_path)
+    end
   rescue GoatService::RateLimitError => e
     if attempt < MAX_BLOB_RETRIES
       backoff = 2 ** (attempt + 2) # Longer backoff for rate limits: 8s, 16s, 32s

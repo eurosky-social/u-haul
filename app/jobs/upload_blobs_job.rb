@@ -116,6 +116,9 @@ class UploadBlobsJob < ApplicationJob
     queue = Queue.new
     aborted = false # set when the migration is cancelled/failed while uploading
 
+    # Measure this sweep: every attempt, its outcome and how long it took.
+    start_blob_pass(migration, pass: BlobTransferTelemetry::PASS_PARALLEL, goat: goat)
+
     # Add all blob files to the queue
     blob_files.each_with_index { |blob_file, index| queue << [blob_file, index] }
 
@@ -180,8 +183,22 @@ class UploadBlobsJob < ApplicationJob
     # Wait for all worker threads to complete
     threads.each(&:join)
 
+    # Whatever is still queued was abandoned when the migration went terminal.
+    # Count it, so an aborted pass cannot be read as a clean one.
+    loop do
+      abandoned_file, = queue.pop(true)
+      skip_blob(File.basename(abandoned_file))
+    rescue ThreadError
+      break
+    end
+
     # Final progress update
     update_upload_progress(migration, uploaded_count, total_blobs, total_bytes)
+
+    # Close the parallel pass here rather than at the end of the method: the
+    # sequential retry below has its own, very different, success rate and
+    # averaging the two would hide both.
+    finish_blob_pass
 
     raise Migration::Aborted, "Migration #{migration.token} was cancelled or failed during blob upload; stopping" if aborted
 
@@ -243,11 +260,16 @@ class UploadBlobsJob < ApplicationJob
         logger.info("Wrote failed uploads manifest to #{manifest_path}")
       end
     end
+  ensure
+    # Safety net for the abort path; a no-op once the pass is already closed.
+    finish_blob_pass
   end
 
   # Upload blob with retry logic
   def upload_blob_with_retry(goat, blob_file, attempt = 1)
-    goat.upload_blob(blob_file)
+    measure(cid: File.basename(blob_file.to_s), bytes: file_size(blob_file)) do
+      goat.upload_blob(blob_file)
+    end
   rescue GoatService::RateLimitError => e
     if attempt < MAX_RETRIES
       backoff = 2 ** (attempt + 2) # 8s, 16s, 32s, 64s, 128s
@@ -275,9 +297,15 @@ class UploadBlobsJob < ApplicationJob
     logger.warn("#{failed_files.length} blobs failed in the parallel pass; retrying one at a time after #{SECOND_PASS_DELAY}s")
     pause(SECOND_PASS_DELAY)
 
+    start_blob_pass(migration, pass: BlobTransferTelemetry::PASS_SEQUENTIAL, goat: goat)
+
     recovered = []
-    failed_files.each do |blob_file|
-      break if migration.terminal_in_db?
+    failed_files.each_with_index do |blob_file, index|
+      if migration.terminal_in_db?
+        # Count the ones this pass never got to, so giving up is visible.
+        failed_files[index..].each { |file| skip_blob(File.basename(file)) }
+        break
+      end
 
       begin
         upload_blob_with_retry(goat, blob_file)
@@ -290,6 +318,8 @@ class UploadBlobsJob < ApplicationJob
 
     logger.info("Second pass recovered #{recovered.length}/#{failed_files.length} blobs")
     recovered
+  ensure
+    finish_blob_pass
   end
 
   # All waits go through here so specs can stub them

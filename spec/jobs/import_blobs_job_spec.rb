@@ -14,6 +14,7 @@ RSpec.describe ImportBlobsJob, type: :job do
   self.use_transactional_tests = false
 
   after { Migration.delete_all }
+  after { BlobTransferStat.delete_all }
 
   let(:migration) do
     Migration.create!(
@@ -33,6 +34,9 @@ RSpec.describe ImportBlobsJob, type: :job do
   before do
     migration.set_password('test_password_123')
     allow(GoatService).to receive(:new).with(migration).and_return(goat_service)
+    # Blob passes label their stats with the version the target PDS reports,
+    # so the double has to answer for it.
+    allow(goat_service).to receive(:target_pds_version).and_return('0.5.29')
     # The job authenticates against the target PDS before uploading anything;
     # without this the double rejects the call and every example fails there.
     allow(goat_service).to receive(:login_new_pds)
@@ -77,6 +81,23 @@ RSpec.describe ImportBlobsJob, type: :job do
 
         migration.reload
         expect(migration.status).to eq('pending_prefs')
+      end
+
+      # The durable record of the pass: the log line rotates away, this does not.
+      it 'records a blob transfer stat for the pass' do
+        described_class.perform_now(migration.id)
+
+        stat = BlobTransferStat.find_by(migration_id: migration.id, pass: 'parallel')
+        expect(stat).to have_attributes(
+          job_name: 'ImportBlobsJob',
+          target_pds_version: '0.5.29',
+          target_host: migration.new_pds_host,
+          blobs_attempted: blob_cids.length,
+          blobs_succeeded: blob_cids.length,
+          blobs_failed: 0
+        )
+        expect(stat.outcome_counts).to include('upload.ok' => blob_cids.length,
+                                               'download.ok' => blob_cids.length)
       end
 
       it 'marks blobs_started_at timestamp' do

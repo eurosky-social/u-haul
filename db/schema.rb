@@ -10,9 +10,39 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_03_13_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_09_07_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "blob_transfer_stats", force: :cascade do |t|
+    t.bigint "migration_id"
+    t.string "job_name", null: false
+    t.string "pass", null: false
+    t.string "source_host"
+    t.string "target_host"
+    t.string "target_pds_version"
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.integer "duration_ms"
+    t.integer "blobs_attempted", default: 0, null: false
+    t.integer "blobs_succeeded", default: 0, null: false
+    t.integer "blobs_failed", default: 0, null: false
+    t.integer "upload_attempts", default: 0, null: false
+    t.bigint "bytes_transferred", default: 0, null: false
+    t.integer "throughput_bps"
+    t.integer "upload_bps_p50"
+    t.integer "upload_ms_p50"
+    t.integer "upload_ms_p95"
+    t.integer "upload_ms_max"
+    t.jsonb "outcome_counts", default: {}, null: false
+    t.jsonb "failure_samples", default: [], null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_blob_transfer_stats_on_created_at"
+    t.index ["migration_id"], name: "index_blob_transfer_stats_on_migration_id"
+    t.index ["outcome_counts"], name: "index_blob_transfer_stats_on_outcome_counts", using: :gin
+    t.index ["target_pds_version"], name: "index_blob_transfer_stats_on_target_pds_version"
+  end
 
   create_table "legal_consents", force: :cascade do |t|
     t.string "did", null: false
@@ -108,6 +138,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_03_13_000001) do
     t.index ["pds_host"], name: "index_pds_consents_on_pds_host"
   end
 
+  add_foreign_key "blob_transfer_stats", "migrations", on_delete: :nullify
   add_foreign_key "legal_consents", "legal_snapshots", column: "privacy_policy_snapshot_id"
   add_foreign_key "legal_consents", "legal_snapshots", column: "tos_snapshot_id"
 end

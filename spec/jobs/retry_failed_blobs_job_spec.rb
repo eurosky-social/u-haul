@@ -21,6 +21,9 @@ RSpec.describe RetryFailedBlobsJob, type: :job do
 
   before do
     allow(GoatService).to receive(:new).with(migration).and_return(goat_service)
+    # Blob passes label their stats with the version the target PDS reports,
+    # so the double has to answer for it.
+    allow(goat_service).to receive(:target_pds_version).and_return('0.5.29')
     allow(goat_service).to receive(:login_new_pds)
     allow_any_instance_of(described_class).to receive(:pause)
     FileUtils.mkdir_p(storage_dir.join('blobs'))

@@ -151,6 +151,9 @@ class ImportBlobsJob < ApplicationJob
     # Login to new PDS for uploads
     goat.login_new_pds
 
+    # Measure this sweep: every attempt, its outcome and how long it took.
+    start_blob_pass(migration, pass: BlobTransferTelemetry::PASS_PARALLEL, goat: goat)
+
     total_bytes_transferred = 0
     successful_count = 0
     failed_cids = []
@@ -229,6 +232,15 @@ class ImportBlobsJob < ApplicationJob
     # Wait for all worker threads to complete
     threads.each(&:join)
 
+    # Whatever is still queued was abandoned when the migration went terminal.
+    # Count it, so an aborted pass cannot be read as a clean one.
+    loop do
+      cid, = queue.pop(true)
+      skip_blob(cid)
+    rescue ThreadError
+      break
+    end
+
     # Final progress update
     update_blob_progress(migration, successful_count, blobs.length, total_bytes_transferred)
 
@@ -271,11 +283,15 @@ class ImportBlobsJob < ApplicationJob
         logger.info("Wrote failed uploads manifest to #{manifest_path}")
       end
     end
+  ensure
+    # Also runs when the pass is abandoned mid-flight (Migration::Aborted), so
+    # a cancelled migration still leaves its numbers behind.
+    finish_blob_pass
   end
 
   # Download blob with retry logic
   def download_blob_with_retry(goat, cid, attempt = 1)
-    goat.download_blob(cid)
+    measure(cid: cid, phase: :download) { goat.download_blob(cid) }
   rescue GoatService::RateLimitError => e
     if attempt < MAX_BLOB_RETRIES
       backoff = 2 ** (attempt + 2) # Longer backoff for rate limits: 8s, 16s, 32s
@@ -299,7 +315,9 @@ class ImportBlobsJob < ApplicationJob
 
   # Upload blob with retry logic
   def upload_blob_with_retry(goat, blob_path, attempt = 1)
-    goat.upload_blob(blob_path)
+    measure(cid: File.basename(blob_path.to_s), bytes: file_size(blob_path)) do
+      goat.upload_blob(blob_path)
+    end
   rescue GoatService::RateLimitError => e
     if attempt < MAX_BLOB_RETRIES
       backoff = 2 ** (attempt + 2) # Longer backoff for rate limits: 8s, 16s, 32s
@@ -402,16 +420,20 @@ class ImportBlobsJob < ApplicationJob
     reconciled_count = 0
     still_missing = []
 
+    # Reconciliation gets its own pass: its success rate says something
+    # different from the main sweep's, and averaging them hides both.
+    start_blob_pass(migration, pass: BlobTransferTelemetry::PASS_RECONCILE, goat: goat)
+
     missing_cids.each_with_index do |cid, index|
       begin
         logger.info("Reconciling missing blob #{index + 1}/#{missing_cids.length}: #{cid}")
 
         # Download from old PDS
-        blob_path = goat.download_blob(cid)
+        blob_path = measure(cid: cid, phase: :download) { goat.download_blob(cid) }
         blob_size = File.size(blob_path)
 
         # Upload to new PDS
-        goat.upload_blob(blob_path)
+        measure(cid: cid, bytes: blob_size) { goat.upload_blob(blob_path) }
 
         # Cleanup
         FileUtils.rm_f(blob_path)
@@ -451,6 +473,9 @@ class ImportBlobsJob < ApplicationJob
     migration.progress_data['reconciliation_status'] = 'error'
     migration.progress_data['reconciliation_error'] = e.message
     migration.save!
+  ensure
+    # No-op on the paths that return before reconciliation opens a pass.
+    finish_blob_pass
   end
 
   # Format bytes for human-readable output
