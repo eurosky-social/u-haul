@@ -126,16 +126,31 @@ end
 
 class GoatService
   # Custom exceptions
-  class GoatError < StandardError; end
+  #
+  # GoatError carries optional structured context alongside its message.
+  # Without it a PDS 500 and a read timeout are both "a NetworkError with a
+  # sentence in it", and counting one against the other means regexing log
+  # lines - which is exactly what made the blob failures so hard to quantify.
+  class GoatError < StandardError
+    attr_reader :http_status, :cid, :phase, :body_snippet
+
+    def initialize(message = nil, http_status: nil, cid: nil, phase: nil, body_snippet: nil)
+      @http_status = http_status
+      @cid = cid
+      @phase = phase
+      @body_snippet = body_snippet
+      super(message)
+    end
+  end
   class AuthenticationError < GoatError; end
   class NetworkError < GoatError; end
   class TimeoutError < GoatError; end
   class RateLimitError < NetworkError  # Raised when PDS rate-limits our requests
     attr_reader :retry_after
 
-    def initialize(message = nil, retry_after: nil)
+    def initialize(message = nil, retry_after: nil, **context)
       @retry_after = retry_after
-      super(message)
+      super(message, **context)
     end
   end
   class AccountExistsError < GoatError; end  # Raised when account already exists on target PDS
@@ -181,6 +196,12 @@ class GoatService
   ].freeze
 
   DEFAULT_TIMEOUT = 300 # 5 minutes
+
+  # Failures that mean "the far side went quiet" rather than "the far side
+  # said no". A stalled upload is the signature symptom of the PDS blob
+  # handler wedging, so it is worth counting separately from an HTTP error.
+  # Net::ReadTimeout and Net::OpenTimeout are both Timeout::Error.
+  TIMEOUT_ERRORS = [Timeout::Error, Errno::ETIMEDOUT].freeze
 
   # Transient rejection of a no-input POST whose (empty) body got re-framed as
   # chunked by a proxy such as Cloudflare Tunnel (bluesky-social/atproto#3267).
@@ -596,6 +617,25 @@ class GoatService
     raise NetworkError, "Failed to list blobs: #{e.message}"
   end
 
+  # Version string the target PDS reports at /xrpc/_health.
+  #
+  # Recorded against every blob pass so a change in transfer behaviour can be
+  # tied to a PDS upgrade rather than guessed at. The endpoint is public,
+  # unauthenticated and cheap. Memoised per service instance, and never fatal:
+  # an unreachable health endpoint costs a label, not a migration.
+  def target_pds_version
+    return @target_pds_version if defined?(@target_pds_version)
+
+    @target_pds_version = begin
+      response = HTTParty.get("#{migration.new_pds_host}/xrpc/_health", timeout: 5)
+      body = response.success? ? response.parsed_response : nil
+      body.is_a?(Hash) ? body['version'].presence : nil
+    rescue StandardError => e
+      logger.debug("Could not read PDS version from #{migration.new_pds_host}: #{e.message}")
+      nil
+    end
+  end
+
   def download_blob(cid)
     with_rate_limit_retry("download_blob(#{cid})") do
       download_blob_request(cid)
@@ -632,10 +672,12 @@ class GoatService
         if response.code.to_i == 429
           retry_after = response['Retry-After']&.to_i
           logger.warn("Rate limit hit while downloading blob #{cid}: #{response.code} #{response.message}")
-          raise RateLimitError.new("PDS rate limit exceeded while downloading blob: #{response.code} #{response.message}", retry_after: retry_after)
+          raise RateLimitError.new("PDS rate limit exceeded while downloading blob: #{response.code} #{response.message}",
+                                   retry_after: retry_after, http_status: 429, cid: cid, phase: :download)
         end
 
-        raise NetworkError, "Failed to download blob: #{response.code} #{response.message}"
+        raise NetworkError.new("Failed to download blob: #{response.code} #{response.message}",
+                               http_status: response.code.to_i, cid: cid, phase: :download)
       end
 
       File.open(blob_path, 'wb') do |file|
@@ -647,10 +689,15 @@ class GoatService
     logger.info("Blob downloaded: #{blob_path} (#{file_size_kb.round(2)} KB)")
 
     blob_path.to_s
-  rescue RateLimitError
-    raise  # Re-raise rate limit errors
+  rescue GoatError
+    # Already classified above. Re-wrapping would bury the status code and
+    # double the "Failed to download blob:" prefix in the message.
+    raise
+  rescue *TIMEOUT_ERRORS => e
+    raise TimeoutError.new("Failed to download blob #{cid}: #{e.class}: #{e.message}",
+                           cid: cid, phase: :download)
   rescue StandardError => e
-    raise NetworkError, "Failed to download blob #{cid}: #{e.message}"
+    raise NetworkError.new("Failed to download blob #{cid}: #{e.message}", cid: cid, phase: :download)
   end
 
   def upload_blob(blob_path)
@@ -662,8 +709,12 @@ class GoatService
   def upload_blob_request(blob_path)
     logger.info("Uploading blob: #{blob_path}")
 
+    # Blobs are stored on disk under their CID, both in the migration work dir
+    # and in the backup bundle, so this identifies the blob in any error.
+    blob_cid = File.basename(blob_path.to_s)
+
     unless File.exist?(blob_path)
-      raise GoatError, "Blob file not found: #{blob_path}"
+      raise GoatError.new("Blob file not found: #{blob_path}", cid: blob_cid, phase: :upload)
     end
 
     url = "#{migration.new_pds_host}/xrpc/com.atproto.repo.uploadBlob"
@@ -700,14 +751,17 @@ class GoatService
       if response.code.to_i == 429
         retry_after = response['Retry-After']&.to_i
         logger.warn("Rate limit hit while uploading blob: #{response.code} #{response.message}")
-        raise RateLimitError.new("PDS rate limit exceeded while uploading blob: #{response.code} #{response.message}", retry_after: retry_after)
+        raise RateLimitError.new("PDS rate limit exceeded while uploading blob: #{response.code} #{response.message}",
+                                 retry_after: retry_after, http_status: 429, cid: blob_cid, phase: :upload)
       end
 
       # Include the start of the body: the PDS' error name/message is the only
       # clue its operators get (a bare "500 Internal Server Error" is not).
       body_snippet = response.body.to_s.gsub(/\s+/, ' ').strip[0, 200]
       detail = body_snippet.empty? ? '' : " - #{body_snippet}"
-      raise NetworkError, "Failed to upload blob: #{response.code} #{response.message}#{detail}"
+      raise NetworkError.new("Failed to upload blob: #{response.code} #{response.message}#{detail}",
+                             http_status: response.code.to_i, cid: blob_cid, phase: :upload,
+                             body_snippet: body_snippet.presence)
     end
 
     parsed = JSON.parse(response.body)
@@ -715,11 +769,18 @@ class GoatService
 
     parsed
   rescue JSON::ParserError => e
-    raise GoatError, "Failed to parse upload response: #{e.message}"
-  rescue RateLimitError
-    raise  # Re-raise rate limit errors
+    raise GoatError.new("Failed to parse upload response: #{e.message}", cid: blob_cid, phase: :upload)
+  rescue GoatError
+    # Already classified above. Re-wrapping would bury the status code and
+    # double the "Failed to upload blob:" prefix in the message.
+    raise
+  rescue *TIMEOUT_ERRORS => e
+    # The upload stalling until the timeout - rather than being refused - is
+    # what a wedged PDS blob handler looks like from this side.
+    raise TimeoutError.new("Failed to upload blob: #{e.class}: #{e.message}",
+                           cid: blob_cid, phase: :upload)
   rescue StandardError => e
-    raise NetworkError, "Failed to upload blob: #{e.message}"
+    raise NetworkError.new("Failed to upload blob: #{e.message}", cid: blob_cid, phase: :upload)
   end
 
   # Preferences Methods
