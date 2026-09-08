@@ -36,11 +36,19 @@ bundle exec rake "blobs:failures[7]"  # what the failures actually were
 Quote the task name — zsh eats the square brackets otherwise.
 
 ```
-  PDS version  passes  migrations  blobs  ok   failed  success  upload p50  p95 ms
-  -----------  ------  ----------  -----  ---  ------  -------  ----------  -------
-  0.5.10       12      1           1,200  885  315     73.8%    1.19 MB/s   118,000
-  0.5.29       6       1           600    600  0       100.0%   11.25 MB/s  420
+  target          PDS version    passes  migrations  blobs  ok   failed  success  upload p50  p95 ms
+  --------------  -------------  ------  ----------  -----  ---  ------  -------  ----------  -------
+  eurosky.social  0.5.10         8       1           800    592  208     74.0%    1.19 MB/s   118,000
+  bsky.social     88465e2115f5…  5       1           500    495  5       99.0%    0.07 MB/s   5,262
+  eurosky.social  0.5.29         4       1           400    400  0       100.0%   11.25 MB/s  420
 ```
+
+- **`target`** — migrations run in both directions, so rows are per target PDS.
+  Mixing the two says nothing useful: the PDS we operate and the one a user is
+  leaving for have separate stories. The `bsky.social` row also shows why the
+  version column is not always a version — its `/xrpc/_health` answers with a
+  git SHA, truncated here, which is a stable deployment identifier rather than
+  something you can read.
 
 - **`success`** — the share of blobs a pass was asked to move that it moved.
   A pass with nothing to do reports `-` rather than 100%, so empty passes
@@ -53,9 +61,9 @@ Quote the task name — zsh eats the square brackets otherwise.
   ceiling mean uploads are *stalling* rather than being refused.
 
 `target_pds_version` comes from the target's `/xrpc/_health`, read once per
-job. It is the column that makes a before/after comparison possible: when the
-PDS image is bumped, the rows either side of the bump line up next to each
-other without anyone having to remember the date.
+job. Together with `target_host` it is what makes a before/after comparison
+possible: when the PDS image is bumped, the rows either side of the bump line
+up next to each other without anyone having to remember the date.
 
 ## Outcome buckets
 
@@ -81,14 +89,15 @@ pressure. A pass fighting the target for every file shows up as 2-3.
 ## SQL
 
 ```sql
--- Success rate per PDS version, last 30 days
-SELECT target_pds_version,
+-- Success rate per target PDS version, last 30 days. Group by the host too:
+-- migrations run both ways, and two targets can report the same version.
+SELECT target_host, target_pds_version,
        SUM(blobs_attempted) AS attempted,
        SUM(blobs_succeeded) AS succeeded,
        ROUND(100.0 * SUM(blobs_succeeded) / NULLIF(SUM(blobs_attempted), 0), 1) AS pct
 FROM blob_transfer_stats
 WHERE created_at > now() - interval '30 days'
-GROUP BY 1 ORDER BY attempted DESC;
+GROUP BY 1, 2 ORDER BY attempted DESC;
 
 -- How often did uploads stall rather than get refused?
 SELECT date_trunc('day', created_at) AS day,

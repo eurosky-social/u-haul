@@ -16,6 +16,23 @@ module BlobStatsReport
     format('%.1f%%', fraction * 100)
   end
 
+  # Migrations run both ways, so a row is only meaningful next to its target.
+  def host(url)
+    return '-' if url.blank?
+
+    url.to_s.sub(%r{\Ahttps?://}, '')
+  end
+
+  # Not every PDS reports a version: bsky.social's /xrpc/_health answers with a
+  # git SHA. Truncate those rather than letting one column swallow the table,
+  # but leave real version strings untouched.
+  def version(value)
+    v = value.to_s
+    return '-' if v.empty?
+
+    v.length > 14 ? "#{v[0, 12]}\u2026" : v
+  end
+
   def bytes_per_second(bps)
     return '-' if bps.nil? || bps.to_i.zero?
 
@@ -60,7 +77,8 @@ namespace :blobs do
 
     rows = summary.map do |entry|
       [
-        entry[:target_pds_version].to_s,
+        BlobStatsReport.host(entry[:target_host]),
+        BlobStatsReport.version(entry[:target_pds_version]),
         entry[:passes].to_s,
         entry[:migrations].to_s,
         BlobStatsReport.number(entry[:blobs_attempted]),
@@ -72,12 +90,14 @@ namespace :blobs do
       ]
     end
 
-    headers = ['PDS version', 'passes', 'migrations', 'blobs', 'ok', 'failed',
-               'success', 'upload p50', 'p95 ms']
+    headers = ['target', 'PDS version', 'passes', 'migrations', 'blobs', 'ok',
+               'failed', 'success', 'upload p50', 'p95 ms']
     puts BlobStatsReport.table(headers, rows)
 
     puts
-    puts '  Reading it: `success` is the share of blobs a pass was asked to move that it moved.'
+    puts '  Reading it: rows are per target PDS - migrations run both ways, and the two'
+    puts '  directions say nothing about each other. `success` is the share of blobs a pass'
+    puts '  was asked to move that it moved.'
     puts '  `upload p50` is the median speed of a single upload - a hard ceiling near'
     puts '  1.19 MB/s means an upload shaper in front of the PDS, not a slow network.'
     puts

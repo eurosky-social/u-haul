@@ -10,6 +10,9 @@ RSpec.describe BlobTransferStat do
       migration: migration,
       job_name: 'ImportBlobsJob',
       pass: 'parallel',
+      # The telemetry always records the target; rows without one are not a
+      # shape production produces.
+      target_host: migration.new_pds_host,
       started_at: Time.current,
       blobs_attempted: 100,
       blobs_succeeded: 90,
@@ -56,10 +59,40 @@ RSpec.describe BlobTransferStat do
       old_version = summary.find { |entry| entry[:target_pds_version] == '0.5.10' }
       new_version = summary.find { |entry| entry[:target_pds_version] == '0.5.29' }
 
+      expect(old_version[:target_host]).to eq(migration.new_pds_host)
+
       expect(old_version).to include(passes: 2, blobs_attempted: 200, blobs_succeeded: 170,
                                      blobs_failed: 30, success_rate: 0.85)
       expect(old_version[:outcomes]).to eq('upload.ok' => 170, 'upload.http_500' => 20, 'upload.timeout' => 10)
       expect(new_version).to include(passes: 1, success_rate: 1.0, upload_bps_p50: 12_000_000)
+    end
+
+    # Migrations run in both directions, so two different targets can report the
+    # same version string - and one of them is not even a version: bsky.social's
+    # /xrpc/_health answers with a git SHA. Keyed on the version alone these
+    # collapsed into one row that belonged to neither host.
+    it 'does not merge two targets that report the same version' do
+      stat(target_host: 'https://eurosky.social', target_pds_version: '0.5.10',
+           blobs_attempted: 100, blobs_succeeded: 50, blobs_failed: 50)
+      stat(target_host: 'https://bsky.social', target_pds_version: '0.5.10',
+           blobs_attempted: 100, blobs_succeeded: 100, blobs_failed: 0)
+
+      summary = described_class.summary(since: 1.day.ago)
+      eurosky = summary.find { |entry| entry[:target_host] == 'https://eurosky.social' }
+      bsky    = summary.find { |entry| entry[:target_host] == 'https://bsky.social' }
+
+      expect(summary.length).to eq(2)
+      expect(eurosky[:success_rate]).to eq(0.5)
+      expect(bsky[:success_rate]).to eq(1.0)
+    end
+
+    it 'keeps a git SHA apart from a semver on a different host' do
+      sha = '88465e2115f5b1f0c5c230d9e96cf0a4311e1980'
+      stat(target_host: 'https://bsky.social', target_pds_version: sha)
+      stat(target_host: 'https://eurosky.social', target_pds_version: '0.5.10')
+
+      versions = described_class.summary(since: 1.day.ago).map { |e| e[:target_pds_version] }
+      expect(versions).to contain_exactly(sha, '0.5.10')
     end
 
     it 'labels rows with no version rather than dropping them' do
